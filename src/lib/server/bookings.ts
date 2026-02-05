@@ -246,7 +246,7 @@ export async function getUserBookings(
 /**
  * Confirm booking (mark payment as complete)
  */
-export async function confirmBooking(bookingId: string): Promise<Booking | null> {
+export async function confirmBooking(bookingId: string, tenantId: string): Promise<Booking | null> {
 	const [updated] = await db
 		.updateTable('bookings')
 		.set({
@@ -255,6 +255,7 @@ export async function confirmBooking(bookingId: string): Promise<Booking | null>
 			updated_at: new Date()
 		})
 		.where('id', '=', bookingId)
+		.where('tenant_id', '=', tenantId)
 		.returningAll()
 		.execute();
 
@@ -266,6 +267,7 @@ export async function confirmBooking(bookingId: string): Promise<Booking | null>
  */
 export async function cancelBooking(
 	bookingId: string,
+	tenantId: string,
 	reason?: string
 ): Promise<Booking | null> {
 	const [updated] = await db
@@ -277,6 +279,7 @@ export async function cancelBooking(
 			updated_at: new Date()
 		})
 		.where('id', '=', bookingId)
+		.where('tenant_id', '=', tenantId)
 		.returningAll()
 		.execute();
 
@@ -301,6 +304,7 @@ export async function createPayment(data: NewPayment): Promise<Payment> {
  */
 export async function markPaymentComplete(
 	paymentId: string,
+	tenantId: string,
 	adminId: string,
 	method?: PaymentMethod,
 	proofUrl?: string
@@ -316,12 +320,13 @@ export async function markPaymentComplete(
 			updated_at: new Date()
 		})
 		.where('id', '=', paymentId)
+		.where('tenant_id', '=', tenantId)
 		.returningAll()
 		.execute();
 
 	if (updated) {
-		// Also confirm the booking
-		await confirmBooking(updated.booking_id);
+		// Also confirm the booking (tenant already verified above)
+		await confirmBooking(updated.booking_id, tenantId);
 	}
 
 	return (updated as Payment) || null;
@@ -469,4 +474,128 @@ export async function cleanupExpiredHolds(): Promise<number> {
 		.executeTakeFirst();
 
 	return Number(result.numUpdatedRows);
+}
+
+export interface BookingFilters {
+	status?: BookingStatus;
+	workshopId?: string;
+	search?: string;
+	dateFrom?: Date;
+	dateTo?: Date;
+}
+
+/**
+ * Get all bookings for a tenant with filters (admin)
+ */
+export async function getTenantBookings(
+	tenantId: string,
+	filters?: BookingFilters
+): Promise<BookingWithDetails[]> {
+	let query = db
+		.selectFrom('bookings')
+		.innerJoin('workshops', 'workshops.id', 'bookings.workshop_id')
+		.innerJoin('users', 'users.id', 'bookings.user_id')
+		.where('bookings.tenant_id', '=', tenantId);
+
+	if (filters?.status) {
+		query = query.where('bookings.status', '=', filters.status);
+	}
+
+	if (filters?.workshopId) {
+		query = query.where('bookings.workshop_id', '=', filters.workshopId);
+	}
+
+	if (filters?.dateFrom) {
+		query = query.where((eb) =>
+			eb(eb.ref('bookings.created_at'), '>=', filters.dateFrom!)
+		);
+	}
+
+	if (filters?.dateTo) {
+		query = query.where((eb) =>
+			eb(eb.ref('bookings.created_at'), '<=', filters.dateTo!)
+		);
+	}
+
+	if (filters?.search) {
+		const searchTerm = `%${filters.search}%`;
+		query = query.where((eb) =>
+			eb.or([
+				eb('users.name', 'ilike', searchTerm),
+				eb('users.phone', 'ilike', searchTerm),
+				eb('users.email', 'ilike', searchTerm)
+			])
+		);
+	}
+
+	const bookings = await query
+		.select([
+			'bookings.id',
+			'bookings.tenant_id',
+			'bookings.user_id',
+			'bookings.workshop_id',
+			'bookings.status',
+			'bookings.hold_expires_at',
+			'bookings.cancelled_at',
+			'bookings.cancellation_reason',
+			'bookings.promo_code_id',
+			'bookings.discount_amount_paise',
+			'bookings.created_at',
+			'bookings.updated_at',
+			'workshops.title as workshop_title',
+			'workshops.slug as workshop_slug',
+			'workshops.venue_name as workshop_venue',
+			'workshops.price_paise as workshop_price',
+			'users.name as user_name',
+			'users.phone as user_phone',
+			'users.email as user_email'
+		])
+		.orderBy('bookings.created_at', 'desc')
+		.execute();
+
+	const bookingIds = bookings.map((b) => b.id);
+	const allPayments =
+		bookingIds.length > 0
+			? await db
+					.selectFrom('payments')
+					.where('booking_id', 'in', bookingIds)
+					.selectAll()
+					.execute()
+			: [];
+
+	const paymentMap = new Map<string, Payment[]>();
+	for (const payment of allPayments) {
+		const existing = paymentMap.get(payment.booking_id) || [];
+		existing.push(payment as Payment);
+		paymentMap.set(payment.booking_id, existing);
+	}
+
+	return bookings.map((b) => ({
+		id: b.id,
+		tenant_id: b.tenant_id,
+		user_id: b.user_id,
+		workshop_id: b.workshop_id,
+		status: b.status as BookingStatus,
+		hold_expires_at: b.hold_expires_at,
+		cancelled_at: b.cancelled_at,
+		cancellation_reason: b.cancellation_reason,
+		promo_code_id: b.promo_code_id,
+		discount_amount_paise: b.discount_amount_paise,
+		created_at: b.created_at,
+		updated_at: b.updated_at,
+		workshop: {
+			id: b.workshop_id,
+			title: b.workshop_title,
+			slug: b.workshop_slug,
+			venue_name: b.workshop_venue,
+			price_paise: b.workshop_price
+		},
+		payments: paymentMap.get(b.id) || [],
+		user: {
+			id: b.user_id,
+			name: b.user_name,
+			phone: b.user_phone,
+			email: b.user_email
+		}
+	}));
 }

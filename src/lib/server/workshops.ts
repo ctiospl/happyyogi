@@ -314,12 +314,14 @@ export async function createWorkshop(
  */
 export async function updateWorkshop(
 	workshopId: string,
+	tenantId: string,
 	data: WorkshopUpdate
 ): Promise<Workshop | null> {
 	const [updated] = await db
 		.updateTable('workshops')
 		.set({ ...data, updated_at: new Date() })
 		.where('id', '=', workshopId)
+		.where('tenant_id', '=', tenantId)
 		.returningAll()
 		.execute();
 
@@ -331,8 +333,21 @@ export async function updateWorkshop(
  */
 export async function updateWorkshopSessions(
 	workshopId: string,
+	tenantId: string,
 	sessions: Omit<NewWorkshopSession, 'workshop_id'>[]
 ): Promise<void> {
+	// Verify workshop belongs to tenant first
+	const workshop = await db
+		.selectFrom('workshops')
+		.where('id', '=', workshopId)
+		.where('tenant_id', '=', tenantId)
+		.select('id')
+		.executeTakeFirst();
+
+	if (!workshop) {
+		throw new Error('Workshop not found');
+	}
+
 	// Delete existing sessions
 	await db
 		.deleteFrom('workshop_sessions')
@@ -357,8 +372,8 @@ export async function updateWorkshopSessions(
 /**
  * Publish a workshop
  */
-export async function publishWorkshop(workshopId: string): Promise<Workshop | null> {
-	return updateWorkshop(workshopId, {
+export async function publishWorkshop(workshopId: string, tenantId: string): Promise<Workshop | null> {
+	return updateWorkshop(workshopId, tenantId, {
 		status: 'published',
 		published_at: new Date()
 	});
@@ -367,8 +382,8 @@ export async function publishWorkshop(workshopId: string): Promise<Workshop | nu
 /**
  * Unpublish a workshop
  */
-export async function unpublishWorkshop(workshopId: string): Promise<Workshop | null> {
-	return updateWorkshop(workshopId, {
+export async function unpublishWorkshop(workshopId: string, tenantId: string): Promise<Workshop | null> {
+	return updateWorkshop(workshopId, tenantId, {
 		status: 'draft',
 		published_at: null
 	});
@@ -377,11 +392,12 @@ export async function unpublishWorkshop(workshopId: string): Promise<Workshop | 
 /**
  * Soft delete a workshop
  */
-export async function deleteWorkshop(workshopId: string): Promise<void> {
+export async function deleteWorkshop(workshopId: string, tenantId: string): Promise<void> {
 	await db
 		.updateTable('workshops')
 		.set({ deleted_at: new Date(), updated_at: new Date() })
 		.where('id', '=', workshopId)
+		.where('tenant_id', '=', tenantId)
 		.execute();
 }
 
@@ -405,6 +421,98 @@ export async function getAvailableCapacity(workshopId: string): Promise<number |
 		.executeTakeFirst();
 
 	return workshop.capacity - Number(bookingCount?.count || 0);
+}
+
+/**
+ * Get a workshop by ID (for admin editing)
+ */
+export async function getWorkshopById(workshopId: string): Promise<WorkshopWithSessions | null> {
+	const workshop = await db
+		.selectFrom('workshops')
+		.leftJoin('instructors', 'instructors.id', 'workshops.instructor_id')
+		.leftJoin('users', 'users.id', 'instructors.user_id')
+		.where('workshops.id', '=', workshopId)
+		.where('workshops.deleted_at', 'is', null)
+		.select([
+			'workshops.id',
+			'workshops.tenant_id',
+			'workshops.instructor_id',
+			'workshops.title',
+			'workshops.slug',
+			'workshops.description',
+			'workshops.content_html',
+			'workshops.faqs',
+			'workshops.venue_name',
+			'workshops.venue_address',
+			'workshops.mode',
+			'workshops.capacity',
+			'workshops.price_paise',
+			'workshops.deposit_amount_paise',
+			'workshops.registration_opens_at',
+			'workshops.registration_closes_at',
+			'workshops.booking_hold_minutes',
+			'workshops.cancellation_policy',
+			'workshops.status',
+			'workshops.published_at',
+			'workshops.seo_title',
+			'workshops.seo_description',
+			'workshops.og_image_url',
+			'workshops.created_at',
+			'workshops.updated_at',
+			'workshops.deleted_at',
+			'instructors.slug as instructor_slug',
+			'instructors.avatar_url as instructor_avatar',
+			'users.name as instructor_name'
+		])
+		.executeTakeFirst();
+
+	if (!workshop) return null;
+
+	const sessions = await db
+		.selectFrom('workshop_sessions')
+		.where('workshop_id', '=', workshop.id)
+		.selectAll()
+		.orderBy('session_order', 'asc')
+		.execute();
+
+	const bookingCount = await db
+		.selectFrom('bookings')
+		.where('workshop_id', '=', workshop.id)
+		.where('status', 'in', ['pending', 'confirmed'])
+		.select(db.fn.count('id').as('count'))
+		.executeTakeFirst();
+
+	return {
+		...(workshop as unknown as Workshop),
+		sessions: sessions as WorkshopSession[],
+		instructor: workshop.instructor_id
+			? {
+					id: workshop.instructor_id,
+					name: workshop.instructor_name,
+					slug: workshop.instructor_slug!,
+					avatar_url: workshop.instructor_avatar
+				}
+			: undefined,
+		bookings_count: Number(bookingCount?.count || 0)
+	};
+}
+
+/**
+ * Get all instructors for a tenant (for dropdown selection)
+ */
+export async function getInstructors(
+	tenantId: string
+): Promise<{ id: string; name: string | null; slug: string }[]> {
+	const instructors = await db
+		.selectFrom('instructors')
+		.innerJoin('users', 'users.id', 'instructors.user_id')
+		.innerJoin('user_tenant_links', 'user_tenant_links.user_id', 'users.id')
+		.where('user_tenant_links.tenant_id', '=', tenantId)
+		.where('instructors.deleted_at', 'is', null)
+		.select(['instructors.id', 'users.name', 'instructors.slug'])
+		.execute();
+
+	return instructors;
 }
 
 /**

@@ -16,6 +16,7 @@ export type PaymentMethod = 'upi' | 'cash' | 'card' | 'bank_transfer' | 'gateway
 export type PageStatus = 'draft' | 'published';
 export type ContactStatus = 'new' | 'read' | 'replied' | 'archived';
 export type OtpPurpose = 'login' | 'signup' | 'verify_phone';
+export type AuthMethod = 'phone_otp' | 'email_otp' | 'password';
 
 // ============================================
 // TENANTS
@@ -29,6 +30,7 @@ export interface TenantsTable {
 	currency: string;
 	settings: Json<TenantSettings>;
 	theme: Json<TenantTheme>;
+	payment_gateways: Generated<Json<PaymentGatewayConfig>>;
 	logo_url: string | null;
 	created_at: Generated<Timestamp>;
 	updated_at: Timestamp;
@@ -47,6 +49,34 @@ export interface TenantTheme {
 	secondary_color?: string;
 	font_family?: string;
 	custom_css?: string;
+	colors?: {
+		primary?: string;
+		primary_foreground?: string;
+		secondary?: string;
+		accent?: string;
+	};
+	logo_url?: string;
+	brand_name?: string;
+}
+
+export interface PaymentGatewayConfig {
+	razorpay?: {
+		enabled: boolean;
+		key_id?: string;
+		key_secret?: string;
+		webhook_secret?: string;
+	};
+	cashfree?: {
+		enabled: boolean;
+		app_id?: string;
+		secret_key?: string;
+		webhook_secret?: string;
+	};
+	upi_manual?: {
+		enabled: boolean;
+		upi_id?: string;
+		qr_image_url?: string;
+	};
 }
 
 export type Tenant = Selectable<TenantsTable>;
@@ -65,6 +95,8 @@ export interface UsersTable {
 	name: string | null;
 	avatar_url: string | null;
 	timezone: string | null;
+	password_hash: string | null;
+	auth_method: Generated<AuthMethod>;
 	created_at: Generated<Timestamp>;
 	updated_at: Timestamp;
 	deleted_at: Timestamp | null;

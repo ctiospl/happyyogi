@@ -1,6 +1,7 @@
 import { db } from '$lib/server/db';
 import { createHash, randomBytes } from 'crypto';
 import type { OtpPurpose } from '$lib/server/db/schema';
+import { sendEmail } from '$lib/server/notifications/email';
 
 interface MessageCentralConfig {
 	customerId: string;
@@ -229,4 +230,115 @@ export async function verifyOtp(phone: string, code: string, purpose: OtpPurpose
 		.execute();
 
 	return { success: true, phone: normalizedPhone };
+}
+
+export async function sendEmailOtp(email: string, purpose: OtpPurpose = 'login') {
+	const normalizedEmail = email.toLowerCase().trim();
+
+	// Check for existing unexpired OTP
+	const existing = await db
+		.selectFrom('otp_verifications')
+		.where('phone', '=', normalizedEmail) // reusing phone column for email
+		.where('purpose', '=', purpose)
+		.where('expires_at', '>', new Date())
+		.where('verified_at', 'is', null)
+		.selectAll()
+		.executeTakeFirst();
+
+	if (existing && existing.attempts >= MAX_ATTEMPTS) {
+		return { success: false, error: 'Too many attempts. Please wait and try again.' };
+	}
+
+	// Generate OTP (in dev mode, use fixed OTP)
+	const isDev = process.env.NODE_ENV === 'development';
+	const otp = isDev ? '123456' : generateOtp();
+	const otpHash = hashOtp(otp);
+
+	// Delete old OTPs for this email/purpose
+	await db
+		.deleteFrom('otp_verifications')
+		.where('phone', '=', normalizedEmail)
+		.where('purpose', '=', purpose)
+		.execute();
+
+	// Create new OTP record
+	const expiresAt = new Date(Date.now() + OTP_EXPIRY_MINUTES * 60 * 1000);
+
+	await db
+		.insertInto('otp_verifications')
+		.values({
+			phone: normalizedEmail, // reusing phone column for email
+			otp_hash: otpHash,
+			purpose,
+			expires_at: expiresAt
+		})
+		.execute();
+
+	// Send OTP via email (or log in dev mode)
+	if (isDev) {
+		console.log(`[DEV] Email OTP for ${normalizedEmail}: ${otp}`);
+		return { success: true };
+	}
+
+	const result = await sendEmail({
+		to: normalizedEmail,
+		subject: 'Your Happy Yogi verification code',
+		htmlBody: `
+			<div style="font-family: sans-serif; max-width: 400px; margin: 0 auto;">
+				<h2>Verification Code</h2>
+				<p>Your verification code is:</p>
+				<div style="font-size: 32px; font-weight: bold; letter-spacing: 4px; padding: 20px; background: #f5f5f5; text-align: center; border-radius: 8px;">
+					${otp}
+				</div>
+				<p style="color: #666; margin-top: 20px;">This code expires in ${OTP_EXPIRY_MINUTES} minutes.</p>
+			</div>
+		`,
+		textBody: `Your Happy Yogi verification code is: ${otp}. This code expires in ${OTP_EXPIRY_MINUTES} minutes.`
+	});
+
+	return result;
+}
+
+export async function verifyEmailOtp(email: string, code: string, purpose: OtpPurpose = 'login') {
+	const normalizedEmail = email.toLowerCase().trim();
+
+	// Find the OTP record (reusing phone column for email)
+	const otpRecord = await db
+		.selectFrom('otp_verifications')
+		.where('phone', '=', normalizedEmail)
+		.where('purpose', '=', purpose)
+		.where('expires_at', '>', new Date())
+		.where('verified_at', 'is', null)
+		.selectAll()
+		.executeTakeFirst();
+
+	if (!otpRecord) {
+		return { success: false, error: 'OTP expired or not found. Please request a new one.' };
+	}
+
+	if (otpRecord.attempts >= MAX_ATTEMPTS) {
+		return { success: false, error: 'Too many attempts. Please request a new OTP.' };
+	}
+
+	// Increment attempts
+	await db
+		.updateTable('otp_verifications')
+		.set({ attempts: otpRecord.attempts + 1 })
+		.where('id', '=', otpRecord.id)
+		.execute();
+
+	// Verify OTP hash
+	const codeHash = hashOtp(code);
+	if (codeHash !== otpRecord.otp_hash) {
+		return { success: false, error: 'Invalid OTP code.' };
+	}
+
+	// Mark as verified
+	await db
+		.updateTable('otp_verifications')
+		.set({ verified_at: new Date() })
+		.where('id', '=', otpRecord.id)
+		.execute();
+
+	return { success: true, email: normalizedEmail };
 }
