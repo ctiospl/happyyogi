@@ -1,0 +1,37 @@
+happyyogi.in {
+    reverse_proxy localhost:3000 {
+        header_up X-Real-IP {remote_host}
+        header_up X-Forwarded-For {remote_host}
+        header_up X-Forwarded-Proto {scheme}
+    }
+
+    handle_path /uploads/* {
+        root * /var/www/happyyogi/uploads
+        @forbidden {
+            path *.php *.sh *.sql .env* *.key
+        }
+        respond @forbidden 403
+        file_server
+    }
+
+    encode gzip
+
+    header {
+        X-Content-Type-Options nosniff
+        X-Frame-Options DENY
+        X-XSS-Protection "1; mode=block"
+        Referrer-Policy strict-origin-when-cross-origin
+        Strict-Transport-Security "max-age=31536000; includeSubDomains; preload"
+    }
+
+    log {
+        output file /var/log/caddy/happyyogi.log {
+            roll_size 10mb
+            roll_keep 5
+        }
+    }
+}
+
+www.happyyogi.in {
+    redir https://happyyogi.in{uri} permanent
+}

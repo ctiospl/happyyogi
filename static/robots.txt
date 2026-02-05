@@ -1,0 +1,8 @@
+# Happy Yogi Shaala - Robots.txt
+User-agent: *
+Allow: /
+Disallow: /api/
+Disallow: /_app/
+
+# Sitemap
+Sitemap: https://happyyogi.in/sitemap.xml

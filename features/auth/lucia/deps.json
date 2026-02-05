@@ -1,0 +1,6 @@
+{
+	"dependencies": {
+		"lucia": "^3.2.0",
+		"@lucia-auth/adapter-kysely": "^3.0.0"
+	}
+}
