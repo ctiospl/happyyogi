@@ -311,8 +311,66 @@ export type NewPayment = Insertable<PaymentsTable>;
 export type PaymentUpdate = Updateable<PaymentsTable>;
 
 // ============================================
+// TEMPLATES
+// ============================================
+export type TemplateCategory = 'layout' | 'section' | 'component' | 'custom';
+
+export interface TemplateSchemaField {
+	key: string;
+	type: 'text' | 'textarea' | 'richtext' | 'number' | 'boolean' | 'select' | 'image' | 'object' | 'array';
+	label: string;
+	required?: boolean;
+	placeholder?: string;
+	options?: { value: string; label: string }[]; // for select type
+	fields?: TemplateSchemaField[]; // for object/array types
+	itemType?: 'text' | 'object'; // for array type
+}
+
+export interface TemplateSchema {
+	fields: TemplateSchemaField[];
+}
+
+export interface TemplatesTable {
+	id: Generated<string>;
+	tenant_id: string | null; // null = core/global template
+	slug: string;
+	name: string;
+	description: string | null;
+	category: TemplateCategory;
+
+	// Source code
+	source_code: string;
+
+	// Compiled output
+	compiled_js: string | null;
+	compiled_css: string | null;
+	compile_error: string | null;
+
+	// Schema defines editable props
+	schema: Json<TemplateSchema>;
+
+	// Sample data for preview
+	sample_data: Json<Record<string, unknown>>;
+
+	// Metadata
+	is_core: Generated<boolean>;
+	created_at: Generated<Timestamp>;
+	updated_at: Timestamp;
+}
+
+export type Template = Selectable<TemplatesTable>;
+export type NewTemplate = Insertable<TemplatesTable>;
+export type TemplateUpdate = Updateable<TemplatesTable>;
+
+// ============================================
 // PAGES
 // ============================================
+export interface PageBlock {
+	id: string; // unique block instance id
+	template_id: string;
+	props: Record<string, unknown>;
+}
+
 export interface PagesTable {
 	id: Generated<string>;
 	tenant_id: string;
@@ -321,6 +379,8 @@ export interface PagesTable {
 	content_html: string | null;
 	content_json: Json<Record<string, unknown>> | null;
 	template: string | null;
+	template_id: string | null; // reference to templates table
+	blocks: Generated<Json<PageBlock[]>>; // structured content blocks (defaults to [])
 	seo_title: string | null;
 	seo_description: string | null;
 	og_image_url: string | null;
@@ -421,6 +481,7 @@ export interface Database {
 	bookings: BookingsTable;
 	waitlists: WaitlistsTable;
 	payments: PaymentsTable;
+	templates: TemplatesTable;
 	pages: PagesTable;
 	media: MediaTable;
 	contact_submissions: ContactSubmissionsTable;
