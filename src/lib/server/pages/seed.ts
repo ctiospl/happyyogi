@@ -321,11 +321,17 @@ export async function seedCorePages(tenantId: string): Promise<PageSeedResult> {
 	return result;
 }
 
+/** Core page slugs that should exist for a tenant */
+const CORE_PAGE_SLUGS = pageDefinitions.map((d) => d.slug);
+
 /**
- * Check if core pages exist for a tenant
+ * Check if all core pages exist for a tenant
  */
 export async function hasCorePages(tenantId: string): Promise<boolean> {
-	// Check if home page exists (basic check)
-	const home = await getPageBySlug(tenantId, 'home');
-	return home !== null;
+	// Check if ALL core pages exist
+	for (const slug of CORE_PAGE_SLUGS) {
+		const page = await getPageBySlug(tenantId, slug);
+		if (!page) return false;
+	}
+	return true;
 }

@@ -8,7 +8,7 @@
 	import { Badge } from '$lib/components/ui/badge';
 	import * as Dialog from '$lib/components/ui/dialog';
 	import * as Table from '$lib/components/ui/table';
-	import { Plus, Edit, Eye, Trash2, Download } from '@lucide/svelte';
+	import { Plus, Edit, Eye, Download } from '@lucide/svelte';
 
 	let { data, form }: { data: PageData; form: ActionData } = $props();
 

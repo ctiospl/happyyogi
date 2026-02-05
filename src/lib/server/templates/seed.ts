@@ -528,6 +528,16 @@ const htmlSource = `<script>
 // SAMPLE DATA (from existing content)
 // ============================================
 
+/** Remove `type` and `id` fields from section data for sample_data */
+function omitSectionMeta<T extends { type?: unknown; id?: unknown }>(
+	section: T | undefined
+): Omit<T, 'type' | 'id'> | Record<string, never> {
+	if (!section) return {};
+	// eslint-disable-next-line @typescript-eslint/no-unused-vars
+	const { type, id, ...rest } = section;
+	return rest;
+}
+
 function extractSampleData() {
 	const hero = homePage.sections.find((s) => s.type === 'hero');
 	const services = homePage.sections.find((s) => s.type === 'services-grid');
@@ -539,14 +549,14 @@ function extractSampleData() {
 	const instructors = aboutPage.sections.find((s) => s.type === 'instructor-grid');
 
 	return {
-		hero: hero ? { ...hero, type: undefined, id: undefined } : {},
-		servicesGrid: services ? { ...services, type: undefined, id: undefined } : {},
-		aboutSnippet: about ? { ...about, type: undefined, id: undefined } : {},
-		testimonialCarousel: testimonials ? { ...testimonials, type: undefined, id: undefined } : {},
-		ctaBanner: ctaBanner ? { ...ctaBanner, type: undefined, id: undefined } : {},
-		story: story ? { ...story, type: undefined, id: undefined } : {},
-		valuesGrid: values ? { ...values, type: undefined, id: undefined } : {},
-		instructorGrid: instructors ? { ...instructors, type: undefined, id: undefined } : {},
+		hero: omitSectionMeta(hero),
+		servicesGrid: omitSectionMeta(services),
+		aboutSnippet: omitSectionMeta(about),
+		testimonialCarousel: omitSectionMeta(testimonials),
+		ctaBanner: omitSectionMeta(ctaBanner),
+		story: omitSectionMeta(story),
+		valuesGrid: omitSectionMeta(values),
+		instructorGrid: omitSectionMeta(instructors),
 		html: { html: '<div class="py-8 text-center">Custom HTML content</div>', css: '' }
 	};
 }
@@ -698,13 +708,16 @@ export async function seedCoreTemplates(tenantId: string): Promise<SeedResult> {
 	return result;
 }
 
+/** Core template slugs that should exist for a tenant */
+const CORE_TEMPLATE_SLUGS = templateDefinitions.map((d) => d.slug);
+
 /**
- * Check if core templates exist for a tenant
+ * Check if all core templates exist for a tenant
  */
 export async function hasCoreTemplates(tenantId: string): Promise<boolean> {
 	const templates = await getTenantTemplates(tenantId);
-	const slugs = new Set(templates.map((t) => t.slug));
+	const existingSlugs = new Set(templates.map((t) => t.slug));
 
-	// Check if at least the hero template exists (basic check)
-	return slugs.has('hero');
+	// Check if ALL core templates exist
+	return CORE_TEMPLATE_SLUGS.every((slug) => existingSlugs.has(slug));
 }
