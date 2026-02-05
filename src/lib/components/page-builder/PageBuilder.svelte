@@ -6,6 +6,7 @@
 	import { registerCustomBlocks } from './blocks';
 	import { extractBlocks } from './utils/extract-blocks';
 	import { contentToGrapesProject, isPageContent } from './utils/content-to-grapes';
+	import { generateSiteCSS, injectCanvasCSS } from './utils/site-css';
 
 	interface Props {
 		initialHtml?: string;
@@ -117,6 +118,10 @@
 					editor.setStyle(initialCss);
 				}
 			}
+
+			// Inject site CSS into canvas for 1:1 visual matching
+			const siteCSS = themeCSS || generateSiteCSS();
+			injectCanvasCSS(editor, siteCSS);
 
 			// Notify parent
 			onLoad?.(editor);

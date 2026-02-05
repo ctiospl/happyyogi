@@ -64,32 +64,28 @@ const defaultStory: Omit<StoryBlock, 'type'> = {
 	content: ['First paragraph...', 'Second paragraph...']
 };
 
-// Font families matching the site's theme
-const FONT_DISPLAY = "'Fraunces', serif";
-const FONT_BODY = "'DM Sans', sans-serif";
-
 // Helper to generate placeholder HTML for editor preview
+// Uses CSS classes that match the injected site CSS for 1:1 visual matching
 function heroPlaceholder(props: typeof defaultHero) {
-	// Match actual component: gradient from-background/95 via-background/70 to-background/30 (left to right)
 	return `
-		<div style="position: relative; min-height: 500px; overflow: hidden; font-family: ${FONT_BODY};">
+		<div class="relative min-h-[500px] overflow-hidden">
 			${props.backgroundImage ? `
-				<div style="position: absolute; inset: 0;">
-					<img src="${props.backgroundImage}" style="width: 100%; height: 100%; object-fit: cover;" alt="" />
-					<div style="position: absolute; inset: 0; background: linear-gradient(to right, rgba(255,253,247,0.95) 0%, rgba(255,253,247,0.7) 40%, rgba(255,253,247,0.3) 100%);"></div>
+				<div class="absolute inset-0">
+					<img src="${props.backgroundImage}" class="w-full h-full object-cover" alt="" />
+					<div class="absolute inset-0 bg-gradient-to-r from-background/95 via-background/70 to-background/30"></div>
 				</div>
 			` : `
-				<div style="position: absolute; inset: 0; background: linear-gradient(to right, rgba(255,253,247,0.95), rgba(255,253,247,0.7), rgba(255,253,247,0.3));"></div>
+				<div class="absolute inset-0 bg-gradient-to-r from-background/95 via-background/70 to-background/30"></div>
 			`}
-			<div style="position: relative; z-index: 10; max-width: 1200px; margin: 0 auto; padding: 80px 24px; min-height: 500px; display: flex; align-items: center;">
-				<div style="max-width: 600px;">
-					<h1 style="font-family: ${FONT_DISPLAY}; font-size: 48px; font-weight: 700; margin-bottom: 24px; color: #1a1a1a; line-height: 1.1; letter-spacing: -0.02em;">${props.headline}</h1>
-					${props.subheadline ? `<p style="font-size: 18px; color: #666; margin-bottom: 32px; line-height: 1.7;">${props.subheadline}</p>` : ''}
-					<div style="display: flex; gap: 16px; flex-wrap: wrap;">
-						${props.cta ? `<span style="padding: 14px 28px; background: #5a7a5a; color: white; border-radius: 8px; font-weight: 600; font-size: 16px;">${props.cta.text}</span>` : ''}
-						${props.secondaryCta ? `<span style="padding: 14px 28px; border: 2px solid #1a1a1a; color: #1a1a1a; border-radius: 8px; font-weight: 600; font-size: 16px;">${props.secondaryCta.text}</span>` : ''}
+			<div class="relative z-10 container mx-auto px-6 py-20 min-h-[500px] flex items-center">
+				<div class="max-w-2xl">
+					<h1 class="text-4xl md:text-5xl lg:text-6xl font-bold tracking-tight text-foreground mb-6">${props.headline}</h1>
+					${props.subheadline ? `<p class="text-lg md:text-xl text-muted-foreground mb-8 leading-relaxed">${props.subheadline}</p>` : ''}
+					<div class="flex flex-wrap gap-4">
+						${props.cta ? `<span class="btn btn-primary btn-lg">${props.cta.text}</span>` : ''}
+						${props.secondaryCta ? `<span class="btn btn-outline btn-lg">${props.secondaryCta.text}</span>` : ''}
 					</div>
-					${props.location ? `<p style="margin-top: 32px; font-size: 14px; color: #666; display: flex; align-items: center; gap: 8px;"><span style="color: #5a7a5a;">📍</span> ${props.location}</p>` : ''}
+					${props.location ? `<p class="mt-8 text-sm text-muted-foreground flex items-center gap-2"><span class="text-primary">📍</span> ${props.location}</p>` : ''}
 				</div>
 			</div>
 		</div>
@@ -98,32 +94,29 @@ function heroPlaceholder(props: typeof defaultHero) {
 
 function servicesPlaceholder(props: typeof defaultServicesGrid) {
 	const hasImage = props.featureImage;
-	// Match actual component: cards on LEFT, image on RIGHT with gradient blur background
 	return `
-		<div style="padding: 80px 20px; background: #fffdf7; font-family: ${FONT_BODY};">
-			<div style="max-width: 1200px; margin: 0 auto;">
-				<div style="text-align: center; margin-bottom: 48px;">
-					<h2 style="font-family: ${FONT_DISPLAY}; font-size: 36px; font-weight: 700; margin-bottom: 12px; color: #1a1a1a; letter-spacing: -0.02em;">${props.headline}</h2>
-					<p style="color: #666; font-size: 18px;">${props.subheadline || ''}</p>
+		<div class="py-20 px-4 bg-background">
+			<div class="container mx-auto">
+				<div class="text-center mb-12">
+					<h2 class="text-3xl font-bold tracking-tight text-foreground mb-4">${props.headline}</h2>
+					<p class="text-lg text-muted-foreground">${props.subheadline || ''}</p>
 				</div>
-				<div style="display: grid; grid-template-columns: ${hasImage ? '1fr 1fr' : '1fr'}; gap: 48px; align-items: start;">
-					<!-- Cards on LEFT -->
-					<div style="display: grid; grid-template-columns: repeat(2, 1fr); gap: 16px;">
+				<div class="grid ${hasImage ? 'grid-cols-2' : 'grid-cols-1'} gap-12 items-start">
+					<div class="grid grid-cols-2 gap-4">
 						${props.services.map(s => `
-							<div style="padding: 24px; background: white; border-radius: 12px; box-shadow: 0 1px 3px rgba(0,0,0,0.08); border: 1px solid #f0f0f0;">
-								<div style="width: 48px; height: 48px; background: rgba(90,122,90,0.1); border-radius: 12px; margin-bottom: 16px; display: flex; align-items: center; justify-content: center;">
-									<span style="color: #5a7a5a; font-size: 20px;">●</span>
+							<div class="card p-6">
+								<div class="icon-placeholder mb-4">
+									<span class="text-primary">●</span>
 								</div>
-								<h3 style="font-size: 16px; font-weight: 600; margin-bottom: 8px; color: #1a1a1a;">${s.title}</h3>
-								<p style="font-size: 14px; color: #666; line-height: 1.5;">${s.description}</p>
+								<h3 class="font-semibold text-foreground mb-2">${s.title}</h3>
+								<p class="text-sm text-muted-foreground leading-relaxed">${s.description}</p>
 							</div>
 						`).join('')}
 					</div>
-					<!-- Image on RIGHT with gradient blur -->
 					${hasImage ? `
-						<div style="position: relative;">
-							<div style="position: absolute; inset: -16px; background: linear-gradient(135deg, rgba(184,134,11,0.2), rgba(200,180,150,0.2)); border-radius: 24px; filter: blur(24px);"></div>
-							<img src="${props.featureImage}" style="position: relative; width: 100%; height: auto; border-radius: 16px; box-shadow: 0 20px 40px rgba(0,0,0,0.1);" alt="Feature" />
+						<div class="relative">
+							<div style="position: absolute; inset: -16px; background: linear-gradient(135deg, var(--accent) / 20%, var(--brand-sand) / 20%); border-radius: 24px; filter: blur(24px);"></div>
+							<img src="${props.featureImage}" class="relative w-full rounded-2xl shadow-lg" alt="Feature" />
 						</div>
 					` : ''}
 				</div>
@@ -134,49 +127,46 @@ function servicesPlaceholder(props: typeof defaultServicesGrid) {
 
 function aboutPlaceholder(props: typeof defaultAboutSnippet) {
 	const hasImage = props.image;
-	// Match actual component: image on LEFT with blur gradient, content on RIGHT
 	// @ts-ignore - stats may exist on props from database
 	const stats = (props as { stats?: { value: string; label: string }[] }).stats;
 	return `
-		<div style="padding: 80px 20px; background: rgba(249,247,243,0.3); font-family: ${FONT_BODY};">
-			<div style="max-width: 1100px; margin: 0 auto; display: grid; grid-template-columns: ${hasImage ? '1fr 1fr' : '1fr'}; gap: 48px; align-items: center;">
-				<!-- Image on LEFT with gradient blur -->
+		<div class="py-20 px-4 bg-secondary/30">
+			<div class="max-w-4xl mx-auto grid ${hasImage ? 'grid-cols-2' : 'grid-cols-1'} gap-12 items-center">
 				${hasImage ? `
-					<div style="position: relative;">
-						<div style="position: absolute; inset: -16px; background: linear-gradient(135deg, rgba(200,180,150,0.3), rgba(184,134,11,0.3)); border-radius: 24px; filter: blur(24px);"></div>
-						<div style="position: relative; overflow: hidden; border-radius: 16px; box-shadow: 0 20px 40px rgba(0,0,0,0.1);">
-							<img src="${props.image}" style="width: 100%; display: block;" alt="About" />
+					<div class="relative">
+						<div style="position: absolute; inset: -16px; background: linear-gradient(135deg, var(--brand-sand) / 30%, var(--accent) / 30%); border-radius: 24px; filter: blur(24px);"></div>
+						<div class="relative overflow-hidden rounded-2xl shadow-lg">
+							<img src="${props.image}" class="w-full block" alt="About" />
 						</div>
 						${stats && stats.length > 0 ? `
-							<div style="position: absolute; bottom: -24px; right: -24px; background: white; padding: 16px 20px; border-radius: 12px; box-shadow: 0 10px 30px rgba(0,0,0,0.1); display: flex; align-items: center; gap: 12px;">
-								<div style="width: 48px; height: 48px; background: rgba(90,122,90,0.1); border-radius: 50%; display: flex; align-items: center; justify-content: center;">
-									<span style="color: #5a7a5a; font-size: 20px;">👥</span>
+							<div class="stats-badge">
+								<div class="icon-placeholder rounded-full">
+									<span class="text-primary">👥</span>
 								</div>
 								<div>
-									<p style="font-size: 24px; font-weight: 700; color: #1a1a1a; margin: 0;">${stats[0].value}</p>
-									<p style="font-size: 13px; color: #666; margin: 0;">${stats[0].label}</p>
+									<p class="text-2xl font-bold text-foreground">${stats[0].value}</p>
+									<p class="text-sm text-muted-foreground">${stats[0].label}</p>
 								</div>
 							</div>
 						` : ''}
 					</div>
 				` : ''}
-				<!-- Content on RIGHT -->
 				<div>
-					<h2 style="font-size: 36px; font-weight: 700; margin-bottom: 24px; color: #1a1a1a;">${props.headline}</h2>
-					<p style="color: #666; margin-bottom: 32px; line-height: 1.7; font-size: 17px;">${props.content}</p>
+					<h2 class="text-3xl font-bold text-foreground mb-6">${props.headline}</h2>
+					<p class="text-muted-foreground mb-8 leading-relaxed text-lg">${props.content}</p>
 					${props.highlights ? `
-						<ul style="list-style: none; padding: 0; margin-bottom: 32px;">
+						<ul class="mb-8" style="list-style: none; padding: 0;">
 							${props.highlights.map(h => `
-								<li style="padding: 10px 0; color: #1a1a1a; display: flex; align-items: center; gap: 12px;">
-									<span style="width: 24px; height: 24px; background: rgba(90,122,90,0.1); border-radius: 50%; display: flex; align-items: center; justify-content: center;">
-										<span style="color: #5a7a5a; font-size: 12px;">✓</span>
+								<li class="py-2 text-foreground flex items-center gap-3">
+									<span class="icon-placeholder rounded-full" style="width: 24px; height: 24px;">
+										<span class="text-primary text-sm">✓</span>
 									</span>
 									${h}
 								</li>
 							`).join('')}
 						</ul>
 					` : ''}
-					${props.cta ? `<span style="display: inline-block; padding: 14px 28px; border: 2px solid #1a1a1a; color: #1a1a1a; border-radius: 8px; font-weight: 600;">${props.cta.text}</span>` : ''}
+					${props.cta ? `<span class="btn btn-outline">${props.cta.text}</span>` : ''}
 				</div>
 			</div>
 		</div>
@@ -185,17 +175,17 @@ function aboutPlaceholder(props: typeof defaultAboutSnippet) {
 
 function testimonialsPlaceholder(props: typeof defaultTestimonials) {
 	return `
-		<div style="padding: 80px 20px; background: #fff;">
-			<div style="max-width: 1100px; margin: 0 auto; text-align: center;">
-				<h2 style="font-size: 32px; font-weight: bold; margin-bottom: 48px;">${props.headline}</h2>
-				<div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 32px;">
+		<div class="py-20 px-4 bg-card">
+			<div class="max-w-4xl mx-auto text-center">
+				<h2 class="text-3xl font-bold text-foreground mb-12">${props.headline}</h2>
+				<div class="grid md:grid-cols-2 gap-8">
 					${props.testimonials.map(t => `
-						<div style="padding: 32px; background: #f9f9f9; border-radius: 12px; text-align: left; position: relative;">
-							<div style="font-size: 48px; color: #5a7a5a; opacity: 0.3; position: absolute; top: 16px; left: 24px;">"</div>
-							<p style="font-style: italic; color: #444; margin-bottom: 20px; line-height: 1.7; font-size: 16px; padding-top: 24px;">${t.quote}</p>
-							<div style="border-top: 1px solid #e0e0e0; padding-top: 16px;">
-								<p style="font-weight: 600; margin-bottom: 2px;">${t.author}</p>
-								<p style="font-size: 14px; color: #5a7a5a;">${t.role}</p>
+						<div class="card p-8 text-left relative">
+							<div class="absolute top-4 left-6 text-5xl text-primary opacity-30">"</div>
+							<p class="text-muted-foreground leading-relaxed mb-6 pt-6">${t.quote}</p>
+							<div class="border-t pt-4">
+								<p class="font-semibold text-foreground mb-1">${t.author}</p>
+								<p class="text-sm text-primary">${t.role}</p>
 							</div>
 						</div>
 					`).join('')}
@@ -208,13 +198,13 @@ function testimonialsPlaceholder(props: typeof defaultTestimonials) {
 function ctaPlaceholder(props: typeof defaultCtaBanner) {
 	const bgStyle = props.backgroundImage
 		? `background: linear-gradient(rgba(0,0,0,0.5), rgba(0,0,0,0.5)), url('${props.backgroundImage}') center/cover;`
-		: `background: linear-gradient(135deg, #5a7a5a 0%, #d4a017 100%);`;
+		: `background: linear-gradient(135deg, var(--primary) 0%, var(--accent) 100%);`;
 	return `
-		<div style="padding: 100px 20px; ${bgStyle} text-align: center;">
-			<div style="max-width: 700px; margin: 0 auto;">
-				<h2 style="font-size: 36px; font-weight: bold; color: white; margin-bottom: 16px;">${props.headline}</h2>
-				<p style="color: rgba(255,255,255,0.9); margin-bottom: 32px; font-size: 18px; line-height: 1.6;">${props.subheadline || ''}</p>
-				${props.cta ? `<span style="display: inline-block; padding: 16px 32px; background: #5a7a5a; color: white; border-radius: 6px; font-weight: 600; font-size: 16px;">${props.cta.text}</span>` : ''}
+		<div class="py-24 px-4 text-center" style="${bgStyle}">
+			<div class="max-w-3xl mx-auto">
+				<h2 class="text-3xl font-bold mb-4" style="color: white;">${props.headline}</h2>
+				<p class="text-lg mb-8 leading-relaxed" style="color: rgba(255,255,255,0.9);">${props.subheadline || ''}</p>
+				${props.cta ? `<span class="btn btn-primary btn-lg">${props.cta.text}</span>` : ''}
 			</div>
 		</div>
 	`;
@@ -223,19 +213,19 @@ function ctaPlaceholder(props: typeof defaultCtaBanner) {
 function instructorsPlaceholder(props: typeof defaultInstructorGrid) {
 	const instructors = props.instructors || [];
 	return `
-		<div style="padding: 80px 20px; background: #f9f9f9;">
-			<div style="max-width: 1000px; margin: 0 auto; text-align: center;">
-				<h2 style="font-size: 32px; font-weight: bold; margin-bottom: 8px;">${props.heading}</h2>
-				<p style="color: #666; margin-bottom: 48px; font-size: 18px;">${props.subheading || ''}</p>
-				<div style="display: flex; gap: 40px; justify-content: center; flex-wrap: wrap;">
+		<div class="py-20 px-4 bg-muted">
+			<div class="max-w-4xl mx-auto text-center">
+				<h2 class="text-3xl font-bold text-foreground mb-2">${props.heading}</h2>
+				<p class="text-lg text-muted-foreground mb-12">${props.subheading || ''}</p>
+				<div class="flex gap-12 justify-center flex-wrap">
 					${instructors.length > 0 ? instructors.map(i => `
-						<div style="width: 200px; text-align: center;">
-							<img src="${i.image}" style="width: 160px; height: 160px; object-fit: cover; border-radius: 50%; margin: 0 auto 16px; border: 4px solid #fff; box-shadow: 0 4px 12px rgba(0,0,0,0.1);" alt="${i.name}" />
-							<p style="font-weight: 600; font-size: 18px; margin-bottom: 4px;">${i.name}</p>
-							<p style="font-size: 14px; color: #5a7a5a;">${i.specialty || i.role || ''}</p>
+						<div style="width: 200px;" class="text-center">
+							<img src="${i.image}" class="w-40 h-40 object-cover rounded-full mx-auto mb-4 border-4 shadow-md" style="border-color: white;" alt="${i.name}" />
+							<p class="font-semibold text-lg text-foreground mb-1">${i.name}</p>
+							<p class="text-sm text-primary">${i.specialty || i.role || ''}</p>
 						</div>
 					`).join('') : `
-						<p style="color: #999;">(No instructors configured)</p>
+						<p class="text-muted-foreground">(No instructors configured)</p>
 					`}
 				</div>
 			</div>
@@ -245,15 +235,15 @@ function instructorsPlaceholder(props: typeof defaultInstructorGrid) {
 
 function valuesPlaceholder(props: typeof defaultValuesGrid) {
 	return `
-		<div style="padding: 60px 20px; background: #fff;">
-			<div style="max-width: 1000px; margin: 0 auto; text-align: center;">
-				<h2 style="font-size: 28px; font-weight: bold; margin-bottom: 32px;">${props.heading}</h2>
-				<div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 24px;">
+		<div class="py-16 px-4 bg-card">
+			<div class="max-w-4xl mx-auto text-center">
+				<h2 class="text-3xl font-bold text-foreground mb-8">${props.heading}</h2>
+				<div class="grid md:grid-cols-3 gap-6">
 					${props.values.map(v => `
-						<div style="padding: 24px; text-align: center;">
-							<div style="width: 48px; height: 48px; background: #5a7a5a20; border-radius: 8px; margin: 0 auto 12px;"></div>
-							<h3 style="font-size: 16px; font-weight: 600; margin-bottom: 8px;">${v.title}</h3>
-							<p style="font-size: 14px; color: #666;">${v.description}</p>
+						<div class="p-6 text-center">
+							<div class="icon-placeholder mx-auto mb-4"></div>
+							<h3 class="font-semibold text-foreground mb-2">${v.title}</h3>
+							<p class="text-sm text-muted-foreground">${v.description}</p>
 						</div>
 					`).join('')}
 				</div>
@@ -265,14 +255,14 @@ function valuesPlaceholder(props: typeof defaultValuesGrid) {
 function storyPlaceholder(props: typeof defaultStory) {
 	const hasImage = props.image;
 	return `
-		<div style="padding: 80px 20px; background: #f9f9f9;">
-			<div style="max-width: 1100px; margin: 0 auto; display: grid; grid-template-columns: ${hasImage ? '1fr 1fr' : '1fr'}; gap: 60px; align-items: center;">
+		<div class="py-20 px-4 bg-muted">
+			<div class="max-w-4xl mx-auto grid ${hasImage ? 'grid-cols-2' : 'grid-cols-1'} gap-16 items-center">
 				<div>
-					<h2 style="font-size: 32px; font-weight: bold; margin-bottom: 8px;">${props.heading}</h2>
-					<p style="color: #5a7a5a; margin-bottom: 28px; font-size: 18px;">${props.subheading || ''}</p>
-					${props.content.map(p => `<p style="color: #666; margin-bottom: 16px; line-height: 1.7; font-size: 16px;">${p}</p>`).join('')}
+					<h2 class="text-3xl font-bold text-foreground mb-2">${props.heading}</h2>
+					<p class="text-lg text-primary mb-8">${props.subheading || ''}</p>
+					${props.content.map(p => `<p class="text-muted-foreground mb-4 leading-relaxed">${p}</p>`).join('')}
 				</div>
-				${hasImage ? `<div><img src="${props.image}" style="width: 100%; height: 400px; object-fit: cover; border-radius: 12px;" alt="Story" /></div>` : ''}
+				${hasImage ? `<div><img src="${props.image}" class="w-full h-96 object-cover rounded-xl" alt="Story" /></div>` : ''}
 			</div>
 		</div>
 	`;
