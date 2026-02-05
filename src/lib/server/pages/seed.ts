@@ -7,10 +7,9 @@ import { createPage, getPageBySlug } from '$lib/server/pages';
 import type { PageContent, ContentBlock } from '$lib/types';
 
 // Import existing content
+// Note: servicesPage and contactPage not imported - their structured versions lose significant content
 import { homePage } from '$lib/content/pages/home';
 import { aboutPage } from '$lib/content/pages/about';
-import { servicesPage } from '$lib/content/pages/services';
-import { contactPage } from '$lib/content/pages/contact';
 import { testimonialsPage } from '$lib/content/pages/testimonials';
 
 // ============================================
@@ -55,123 +54,9 @@ function convertAboutPageBlocks(): ContentBlock[] {
 	}) as ContentBlock[];
 }
 
-/**
- * Convert services page to ContentBlock format
- * Services page has a different structure, convert to standard blocks
- */
-function convertServicesPageBlocks(): ContentBlock[] {
-	const blocks: ContentBlock[] = [];
-
-	// Hero section
-	blocks.push({
-		id: 'hero',
-		type: 'hero',
-		order: 0,
-		headline: servicesPage.sections.hero.headline,
-		subheadline: servicesPage.sections.hero.tagline,
-		backgroundImage: servicesPage.sections.hero.backgroundImage
-	});
-
-	// Services grid
-	blocks.push({
-		id: 'services',
-		type: 'services-grid',
-		order: 1,
-		headline: 'What We Offer',
-		subheadline: 'Yoga for every body, every lifestyle',
-		services: servicesPage.sections.services.map((s) => ({
-			title: s.title,
-			description: s.description,
-			icon: s.icon,
-			href: `/services#${s.id}`
-		}))
-	});
-
-	// CTA banner
-	blocks.push({
-		id: 'cta',
-		type: 'cta-banner',
-		order: 2,
-		headline: servicesPage.sections.cta.title,
-		subheadline: servicesPage.sections.cta.description,
-		cta: {
-			text: servicesPage.sections.cta.primaryButton.label,
-			href: servicesPage.sections.cta.primaryButton.href
-		},
-		secondaryCta: servicesPage.sections.cta.secondaryButton
-			? {
-					text: servicesPage.sections.cta.secondaryButton.label,
-					href: servicesPage.sections.cta.secondaryButton.href
-				}
-			: undefined
-	});
-
-	return blocks;
-}
-
-/**
- * Convert contact page to ContentBlock format
- * Contact page has custom sections, create HTML block
- */
-function convertContactPageBlocks(): ContentBlock[] {
-	const blocks: ContentBlock[] = [];
-
-	// Hero section
-	const heroSection = contactPage.sections.find((s) => s.type === 'hero');
-	if (heroSection && 'heading' in heroSection) {
-		blocks.push({
-			id: 'hero',
-			type: 'hero',
-			order: 0,
-			headline: heroSection.heading as string,
-			subheadline: 'subheading' in heroSection ? (heroSection.subheading as string) : undefined
-		});
-	}
-
-	// Extract contact cards
-	const contactCards = contactPage.sections
-		.filter((s) => s.type === 'contact-info')
-		.flatMap((s) => ('cards' in s ? s.cards : []))
-		.filter((card): card is NonNullable<typeof card> => card !== undefined);
-
-	// For contact-specific sections, use HTML block with structured data
-	blocks.push({
-		id: 'contact-content',
-		type: 'html',
-		order: 1,
-		html: `
-<section class="py-16 md:py-24">
-  <div class="container mx-auto px-4">
-    <div class="grid gap-8 md:grid-cols-3 mb-16">
-      ${contactCards
-				.map(
-					(card) => `
-        <div class="rounded-lg border bg-card p-6 text-center">
-          <h3 class="text-lg font-semibold mb-4">${card.title}</h3>
-          ${card.items.map((item) => `<a href="${item.href}" class="block text-muted-foreground hover:text-primary">${item.value}</a>`).join('')}
-        </div>
-      `
-				)
-				.join('')}
-    </div>
-
-    <div class="max-w-2xl mx-auto">
-      <h2 class="text-2xl font-bold text-center mb-8">Send us a Message</h2>
-      <p class="text-center text-muted-foreground mb-8">Fill out the form below and we will get back to you shortly</p>
-      <div class="text-center">
-        <a href="/contact" class="inline-flex h-11 items-center justify-center rounded-md bg-primary px-8 font-medium text-primary-foreground">
-          Contact Form
-        </a>
-      </div>
-    </div>
-  </div>
-</section>
-`,
-		css: ''
-	});
-
-	return blocks;
-}
+// Note: convertServicesPageBlocks and convertContactPageBlocks removed
+// Services page loses schedule table, contact page loses form/location/hours
+// These pages continue using hardcoded content from their respective .ts files
 
 /**
  * Convert testimonials/success-stories page to ContentBlock format
@@ -223,6 +108,8 @@ interface PageDefinition {
 	getBlocks: () => ContentBlock[];
 }
 
+// Note: 'services' and 'contact' excluded - their structured versions lose significant content
+// (schedule table, contact form, location/hours sections). They continue using hardcoded content.
 const pageDefinitions: PageDefinition[] = [
 	{
 		slug: 'home',
@@ -237,20 +124,6 @@ const pageDefinitions: PageDefinition[] = [
 		seoTitle: aboutPage.seo.title,
 		seoDescription: aboutPage.seo.description,
 		getBlocks: convertAboutPageBlocks
-	},
-	{
-		slug: 'services',
-		title: 'Our Services',
-		seoTitle: servicesPage.seo.title,
-		seoDescription: servicesPage.seo.description,
-		getBlocks: convertServicesPageBlocks
-	},
-	{
-		slug: 'contact',
-		title: 'Contact Us',
-		seoTitle: contactPage.seo.title,
-		seoDescription: contactPage.seo.description,
-		getBlocks: convertContactPageBlocks
 	},
 	{
 		slug: 'success-stories',
@@ -328,10 +201,13 @@ const CORE_PAGE_SLUGS = pageDefinitions.map((d) => d.slug);
  * Check if all core pages exist for a tenant
  */
 export async function hasCorePages(tenantId: string): Promise<boolean> {
-	// Check if ALL core pages exist
-	for (const slug of CORE_PAGE_SLUGS) {
-		const page = await getPageBySlug(tenantId, slug);
-		if (!page) return false;
-	}
-	return true;
+	const { db } = await import('$lib/server/db');
+	const result = await db
+		.selectFrom('pages')
+		.where('tenant_id', '=', tenantId)
+		.where('slug', 'in', CORE_PAGE_SLUGS)
+		.where('deleted_at', 'is', null)
+		.select((eb) => eb.fn.countAll().as('count'))
+		.executeTakeFirst();
+	return Number(result?.count ?? 0) >= CORE_PAGE_SLUGS.length;
 }

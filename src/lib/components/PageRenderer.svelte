@@ -25,7 +25,7 @@
 	);
 </script>
 
-{#each sortedBlocks as block (block.id ?? block.order ?? Math.random())}
+{#each sortedBlocks as block, index (block.id ?? `block-${index}`)}
 	{#if block.type === 'hero'}
 		<HeroSection {block} />
 	{:else if block.type === 'services-grid'}

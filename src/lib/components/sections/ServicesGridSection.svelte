@@ -15,7 +15,8 @@
 		activity: Icons.Activity,
 		user: Icons.User,
 		briefcase: Icons.Briefcase,
-		calendar: Icons.Calendar
+		calendar: Icons.Calendar,
+		home: Icons.Home
 	};
 </script>
 
