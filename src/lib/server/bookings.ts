@@ -15,7 +15,10 @@ export interface BookingWithDetails extends Booking {
 		title: string;
 		slug: string;
 		venue_name: string | null;
+		venue_address: string | null;
 		price_paise: number;
+		instructor_name: string | null;
+		first_session_date: Date | null;
 	};
 	payments: Payment[];
 	user: {
@@ -90,6 +93,8 @@ export async function getBookingById(
 		.selectFrom('bookings')
 		.innerJoin('workshops', 'workshops.id', 'bookings.workshop_id')
 		.innerJoin('users', 'users.id', 'bookings.user_id')
+		.leftJoin('instructors', 'instructors.id', 'workshops.instructor_id')
+		.leftJoin('users as instructor_user', 'instructor_user.id', 'instructors.user_id')
 		.where('bookings.id', '=', bookingId)
 		.select([
 			'bookings.id',
@@ -107,7 +112,9 @@ export async function getBookingById(
 			'workshops.title as workshop_title',
 			'workshops.slug as workshop_slug',
 			'workshops.venue_name as workshop_venue',
+			'workshops.venue_address as workshop_venue_address',
 			'workshops.price_paise as workshop_price',
+			'instructor_user.name as instructor_name',
 			'users.name as user_name',
 			'users.phone as user_phone',
 			'users.email as user_email'
@@ -115,6 +122,14 @@ export async function getBookingById(
 		.executeTakeFirst();
 
 	if (!booking) return null;
+
+	// Get first session date
+	const firstSession = await db
+		.selectFrom('workshop_sessions')
+		.where('workshop_id', '=', booking.workshop_id)
+		.orderBy('starts_at', 'asc')
+		.select('starts_at')
+		.executeTakeFirst();
 
 	const payments = await db
 		.selectFrom('payments')
@@ -141,7 +156,10 @@ export async function getBookingById(
 			title: booking.workshop_title,
 			slug: booking.workshop_slug,
 			venue_name: booking.workshop_venue,
-			price_paise: booking.workshop_price
+			venue_address: booking.workshop_venue_address,
+			price_paise: booking.workshop_price,
+			instructor_name: booking.instructor_name,
+			first_session_date: firstSession?.starts_at || null
 		},
 		payments: payments as Payment[],
 		user: {
@@ -231,7 +249,10 @@ export async function getUserBookings(
 			title: b.workshop_title,
 			slug: b.workshop_slug,
 			venue_name: b.workshop_venue,
-			price_paise: b.workshop_price
+			venue_address: null,
+			price_paise: b.workshop_price,
+			instructor_name: null,
+			first_session_date: null
 		},
 		payments: paymentMap.get(b.id) || [],
 		user: {
@@ -400,7 +421,10 @@ export async function getWorkshopBookings(workshopId: string): Promise<BookingWi
 			title: b.workshop_title,
 			slug: b.workshop_slug,
 			venue_name: b.workshop_venue,
-			price_paise: b.workshop_price
+			venue_address: null,
+			price_paise: b.workshop_price,
+			instructor_name: null,
+			first_session_date: null
 		},
 		payments: paymentMap.get(b.id) || [],
 		user: {
@@ -588,7 +612,10 @@ export async function getTenantBookings(
 			title: b.workshop_title,
 			slug: b.workshop_slug,
 			venue_name: b.workshop_venue,
-			price_paise: b.workshop_price
+			venue_address: null,
+			price_paise: b.workshop_price,
+			instructor_name: null,
+			first_session_date: null
 		},
 		payments: paymentMap.get(b.id) || [],
 		user: {

@@ -37,7 +37,8 @@ class MessageCentralClient {
 		this.apiKey = config?.apiKey || process.env.MESSAGE_CENTRAL_API_KEY || '';
 		this.country = config?.country || process.env.MESSAGE_CENTRAL_COUNTRY || '91';
 		this.email = config?.email || process.env.MESSAGE_CENTRAL_EMAIL || 'noreply@happyyogi.in';
-		this.devMode = !this.customerId || !this.apiKey || process.env.NODE_ENV === 'development';
+		// Only use dev mode if credentials are missing (ignore NODE_ENV)
+		this.devMode = !this.customerId || !this.apiKey;
 	}
 
 	async sendOtp(phoneNumber: string, countryCode: string = '91'): Promise<SendOtpResult> {
@@ -149,9 +150,8 @@ export async function sendOtp(phone: string, purpose: OtpPurpose = 'login') {
 		return { success: false, error: 'Too many attempts. Please wait and try again.' };
 	}
 
-	// Generate OTP (in dev mode, use fixed OTP)
-	const isDev = process.env.NODE_ENV === 'development';
-	const otp = isDev ? '123456' : generateOtp();
+	// Generate OTP (use fixed OTP only if SMS client is in dev mode)
+	const otp = smsClient['devMode'] ? '123456' : generateOtp();
 	const otpHash = hashOtp(otp);
 
 	// Delete old OTPs for this phone/purpose
@@ -175,7 +175,7 @@ export async function sendOtp(phone: string, purpose: OtpPurpose = 'login') {
 		.execute();
 
 	// Send OTP via Message Central (or log in dev mode)
-	if (isDev) {
+	if (smsClient['devMode']) {
 		console.log(`[DEV] OTP for ${normalizedPhone}: ${otp}`);
 		return { success: true };
 	}
@@ -249,9 +249,9 @@ export async function sendEmailOtp(email: string, purpose: OtpPurpose = 'login')
 		return { success: false, error: 'Too many attempts. Please wait and try again.' };
 	}
 
-	// Generate OTP (in dev mode, use fixed OTP)
-	const isDev = process.env.NODE_ENV === 'development';
-	const otp = isDev ? '123456' : generateOtp();
+	// Generate OTP (use fixed OTP only if no email service configured)
+	const emailDevMode = !process.env.ZEPTOMAIL_TOKEN;
+	const otp = emailDevMode ? '123456' : generateOtp();
 	const otpHash = hashOtp(otp);
 
 	// Delete old OTPs for this email/purpose
@@ -275,7 +275,7 @@ export async function sendEmailOtp(email: string, purpose: OtpPurpose = 'login')
 		.execute();
 
 	// Send OTP via email (or log in dev mode)
-	if (isDev) {
+	if (emailDevMode) {
 		console.log(`[DEV] Email OTP for ${normalizedEmail}: ${otp}`);
 		return { success: true };
 	}

@@ -223,7 +223,7 @@
 
 						{#if canBook}
 							<Button href="/workshops/{workshop.slug}/book" class="w-full" size="lg">
-								Book Now
+								Register
 							</Button>
 						{:else if isSoldOut}
 							<Button disabled class="w-full" size="lg" variant="outline">Sold Out</Button>

@@ -34,7 +34,7 @@ export const load: PageServerLoad = async ({ params, locals }) => {
 };
 
 export const actions: Actions = {
-	default: async ({ params, locals }) => {
+	default: async ({ params, locals, request }) => {
 		if (!locals.tenant) {
 			return fail(400, { error: 'Tenant not found' });
 		}
@@ -42,6 +42,23 @@ export const actions: Actions = {
 		// Must be logged in
 		if (!locals.user) {
 			return fail(401, { error: 'Please login to book', requiresLogin: true });
+		}
+
+		const formData = await request.formData();
+		const email = formData.get('email') as string | null;
+		// const subscribeNewsletter = formData.get('subscribe_newsletter') === 'true';
+
+		// Update user email if provided
+		if (email && email.trim()) {
+			const { db } = await import('$lib/server/db');
+			await db
+				.updateTable('users')
+				.set({
+					email: email.trim().toLowerCase(),
+					updated_at: new Date()
+				})
+				.where('id', '=', locals.user.id)
+				.execute();
 		}
 
 		const workshop = await getWorkshopBySlug(locals.tenant.id, params.slug);

@@ -138,7 +138,7 @@
 							{formatPrice(workshop.price_paise)}
 						</div>
 						<Button href="/workshops/{workshop.slug}" variant={available === 0 ? 'outline' : 'default'}>
-							{available === 0 ? 'View Details' : 'Book Now'}
+							{available === 0 ? 'View Details' : 'Register'}
 						</Button>
 					</CardFooter>
 				</Card>

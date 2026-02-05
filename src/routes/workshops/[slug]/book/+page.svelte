@@ -6,6 +6,7 @@
 	import { Input } from '$lib/components/ui/input';
 	import { Label } from '$lib/components/ui/label';
 	import { Separator } from '$lib/components/ui/separator';
+	import { Checkbox } from '$lib/components/ui/checkbox';
 	import { AlertCircle, IndianRupee, CalendarDays, MapPin, Loader2 } from '@lucide/svelte';
 	import * as Alert from '$lib/components/ui/alert';
 
@@ -14,9 +15,16 @@
 	let isSubmitting = $state(false);
 	let phone = $state('');
 	let otp = $state('');
+	let email = $state('');
+	let subscribeNewsletter = $state(true);
 	let step = $state<'phone' | 'otp' | 'confirm'>(data.user ? 'confirm' : 'phone');
 	let otpSent = $state(false);
 	let otpError = $state('');
+
+	async function signOut() {
+		await fetch('/api/auth/logout', { method: 'POST' });
+		window.location.reload();
+	}
 
 	function formatPrice(paise: number) {
 		return new Intl.NumberFormat('en-IN', {
@@ -230,8 +238,49 @@
 					<div class="mb-6 space-y-4">
 						<div class="flex items-center justify-between">
 							<span class="text-muted-foreground">Logged in as</span>
-							<span class="font-medium">{data.user?.phone}</span>
+							<div class="text-right">
+								<span class="font-medium">{data.user?.phone}</span>
+								<button
+									type="button"
+									onclick={signOut}
+									class="text-muted-foreground hover:text-foreground ml-2 text-sm underline"
+								>
+									Not you?
+								</button>
+							</div>
 						</div>
+						<Separator />
+
+						<!-- Email collection -->
+						<div>
+							<Label for="email">Email (optional)</Label>
+							<Input
+								id="email"
+								name="email"
+								type="email"
+								placeholder="your@email.com"
+								bind:value={email}
+								disabled={isSubmitting}
+							/>
+							<p class="text-muted-foreground mt-1 text-sm">
+								For booking confirmation and updates
+							</p>
+						</div>
+
+						<div class="flex items-start gap-2">
+							<Checkbox
+								id="newsletter"
+								name="newsletter"
+								checked={subscribeNewsletter}
+								onCheckedChange={(checked) => (subscribeNewsletter = !!checked)}
+							/>
+							<Label for="newsletter" class="text-sm font-normal leading-tight">
+								Keep me updated about workshops and yoga tips
+							</Label>
+						</div>
+
+						<input type="hidden" name="subscribe_newsletter" value={subscribeNewsletter ? 'true' : 'false'} />
+
 						<Separator />
 						<div class="flex items-center justify-between">
 							<span>Workshop Fee</span>

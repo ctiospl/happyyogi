@@ -234,7 +234,7 @@ async function seed() {
 				booking_hold_minutes: 30,
 				cancellation_policy:
 					'Full refund if cancelled 7+ days before. 50% refund if cancelled 3-7 days before. No refund within 3 days.',
-				status: 'draft',
+				status: 'published',
 				seo_title: 'Weekend Ashtanga Intensive | Happy Yogi',
 				seo_description:
 					'Join Deepa Rao for a transformative weekend immersion into Ashtanga Vinyasa Primary Series at Happy Yogi, Mumbai.',

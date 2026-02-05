@@ -76,10 +76,10 @@
 		<!-- Desktop CTA -->
 		<div class="hidden md:block">
 			<Button
-				href="/book"
+				href="/workshops"
 				class="bg-accent text-accent-foreground hover:bg-accent/90 transition-all duration-300 {scrolled ? 'text-sm px-4 py-2' : ''}"
 			>
-				Book a Class
+				Upcoming Workshops
 			</Button>
 		</div>
 
@@ -120,11 +120,11 @@
 						{/each}
 						<div class="mt-4 pt-4 border-t border-border">
 							<Button
-								href="/book"
+								href="/workshops"
 								class="w-full bg-accent text-accent-foreground hover:bg-accent/90"
 								onclick={() => (sheetOpen = false)}
 							>
-								Book a Class
+								Upcoming Workshops
 							</Button>
 						</div>
 					</nav>

@@ -17,7 +17,8 @@
 		CalendarDays,
 		MapPin,
 		Copy,
-		Loader2
+		Loader2,
+		User
 	} from '@lucide/svelte';
 
 	let { data, form }: { data: PageData; form: ActionData } = $props();
@@ -118,11 +119,28 @@
 			<!-- Workshop Details -->
 			<div>
 				<h3 class="mb-2 font-semibold">{booking.workshop.title}</h3>
-				<div class="text-muted-foreground space-y-1 text-sm">
+				<div class="text-muted-foreground space-y-2 text-sm">
+					{#if booking.workshop.instructor_name}
+						<div class="flex items-center gap-2">
+							<User class="h-4 w-4" />
+							with {booking.workshop.instructor_name}
+						</div>
+					{/if}
+					{#if booking.workshop.first_session_date}
+						<div class="flex items-center gap-2">
+							<CalendarDays class="h-4 w-4" />
+							{formatDate(booking.workshop.first_session_date)}
+						</div>
+					{/if}
 					{#if booking.workshop.venue_name}
 						<div class="flex items-center gap-2">
 							<MapPin class="h-4 w-4" />
-							{booking.workshop.venue_name}
+							<div>
+								<span>{booking.workshop.venue_name}</span>
+								{#if booking.workshop.venue_address}
+									<p class="text-muted-foreground/70 text-xs">{booking.workshop.venue_address}</p>
+								{/if}
+							</div>
 						</div>
 					{/if}
 				</div>
