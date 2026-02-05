@@ -183,3 +183,65 @@ export async function isSlugAvailable(
 	const existing = await query.select('id').executeTakeFirst();
 	return !existing;
 }
+
+// ============================================
+// PAGE LOADING HELPERS
+// ============================================
+
+import type { PageContent } from '$lib/types';
+
+export interface StructuredPageData {
+	useStructuredContent: true;
+	structuredContent: PageContent;
+	seo: {
+		title: string;
+		description: string;
+	};
+}
+
+export interface FallbackPageData {
+	useStructuredContent: false;
+}
+
+export type PageLoadResult = StructuredPageData | FallbackPageData;
+
+/**
+ * Load page content for a route
+ * Returns structured content from DB if available, otherwise signals fallback
+ */
+export async function loadPageForRoute(
+	tenantId: string | undefined,
+	slug: string
+): Promise<PageLoadResult> {
+	if (!tenantId) {
+		return { useStructuredContent: false };
+	}
+
+	const page = await getPageBySlug(tenantId, slug);
+
+	if (!page || page.status !== 'published' || !page.content_json) {
+		return { useStructuredContent: false };
+	}
+
+	try {
+		const rawJson =
+			typeof page.content_json === 'string' ? JSON.parse(page.content_json) : page.content_json;
+
+		const contentJson = rawJson.structured ?? rawJson;
+
+		if (contentJson.version && Array.isArray(contentJson.blocks)) {
+			return {
+				useStructuredContent: true,
+				structuredContent: contentJson as PageContent,
+				seo: {
+					title: page.seo_title || page.title,
+					description: page.seo_description || ''
+				}
+			};
+		}
+	} catch (err) {
+		console.warn(`Failed to parse page content for slug "${slug}":`, err);
+	}
+
+	return { useStructuredContent: false };
+}
