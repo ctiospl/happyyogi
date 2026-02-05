@@ -12,7 +12,8 @@
 		Settings,
 		LogOut,
 		Menu,
-		BookOpen
+		BookOpen,
+		Code
 	} from '@lucide/svelte';
 
 	let { data, children }: { data: LayoutData; children: any } = $props();
@@ -24,6 +25,7 @@
 		{ href: '/admin/payments', label: 'Payments', icon: CreditCard },
 		{ href: '/admin/users', label: 'Users', icon: Users },
 		{ href: '/admin/pages', label: 'Pages', icon: FileText },
+		{ href: '/admin/templates', label: 'Templates', icon: Code },
 		{ href: '/admin/settings', label: 'Settings', icon: Settings }
 	];
 
