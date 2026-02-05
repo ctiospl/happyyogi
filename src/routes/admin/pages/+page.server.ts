@@ -1,5 +1,6 @@
 import type { PageServerLoad, Actions } from './$types';
 import { getPages, createPage } from '$lib/server/pages';
+import { seedCorePages, hasCorePages } from '$lib/server/pages/seed';
 import { error, fail, redirect } from '@sveltejs/kit';
 
 export const load: PageServerLoad = async ({ locals }) => {
@@ -12,10 +13,12 @@ export const load: PageServerLoad = async ({ locals }) => {
 	}
 
 	const pages = await getPages(locals.tenant.id);
+	const hasCore = await hasCorePages(locals.tenant.id);
 
 	return {
 		pages,
-		tenant: locals.tenant
+		tenant: locals.tenant,
+		hasCorePages: hasCore
 	};
 };
 
@@ -42,5 +45,25 @@ export const actions: Actions = {
 		});
 
 		throw redirect(302, `/admin/pages/${page.id}/edit`);
+	},
+
+	seed: async ({ locals }) => {
+		if (!locals.tenant || locals.tenantLink?.role !== 'admin') {
+			return fail(403, { error: 'Not authorized' });
+		}
+
+		const result = await seedCorePages(locals.tenant.id);
+
+		if (result.errors.length > 0) {
+			return fail(500, {
+				error: `Seeding failed for: ${result.errors.map((e) => e.slug).join(', ')}`,
+				seedResult: result
+			});
+		}
+
+		return {
+			success: true,
+			seedResult: result
+		};
 	}
 };
