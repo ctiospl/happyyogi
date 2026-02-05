@@ -6,7 +6,7 @@
 	import { registerCustomBlocks } from './blocks';
 	import { extractBlocks } from './utils/extract-blocks';
 	import { contentToGrapesProject, isPageContent } from './utils/content-to-grapes';
-	import { generateSiteCSS, injectCanvasCSS } from './utils/site-css';
+	import { generateSiteCSS } from './utils/site-css';
 
 	interface Props {
 		initialHtml?: string;
@@ -40,10 +40,17 @@
 		const grapesjs = (await import('grapesjs')).default;
 		await import('grapesjs/dist/css/grapes.min.css');
 
+		// Generate site CSS and create blob URL for iframe injection
+		const siteCSS = themeCSS || generateSiteCSS();
+		const cssBlob = new Blob([siteCSS], { type: 'text/css' });
+		const cssBlobUrl = URL.createObjectURL(cssBlob);
+
 		// Build canvas styles array - inject theme CSS into iframe
 		const canvasStyles: string[] = [
 			// Google Fonts
-			'https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,300..900;1,9..144,300..900&family=DM+Sans:ital,wght@0,400..700;1,400..700&display=swap'
+			'https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,300..900;1,9..144,300..900&family=DM+Sans:ital,wght@0,400..700;1,400..700&display=swap',
+			// Site CSS as blob URL
+			cssBlobUrl
 		];
 
 		const defaultConfig: EditorConfig = {
@@ -118,10 +125,6 @@
 					editor.setStyle(initialCss);
 				}
 			}
-
-			// Inject site CSS into canvas for 1:1 visual matching
-			const siteCSS = themeCSS || generateSiteCSS();
-			injectCanvasCSS(editor, siteCSS);
 
 			// Notify parent
 			onLoad?.(editor);
