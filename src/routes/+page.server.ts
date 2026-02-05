@@ -29,9 +29,12 @@ export const load: ServerLoad = async ({ locals }) => {
 		if (page && page.status === 'published' && page.content_json) {
 			// Parse structured content
 			try {
-				const contentJson = typeof page.content_json === 'string'
+				const rawJson = typeof page.content_json === 'string'
 					? JSON.parse(page.content_json)
 					: page.content_json;
+
+				// Check for new wrapper format {grapes, structured} or direct PageContent
+				const contentJson = rawJson.structured ?? rawJson;
 
 				if (contentJson.version && Array.isArray(contentJson.blocks)) {
 					return {

@@ -33,10 +33,12 @@ export const actions: Actions = {
 		const html = formData.get('html') as string;
 		const css = formData.get('css') as string;
 		const json = formData.get('json') as string;
+		const contentBlocks = formData.get('contentBlocks') as string;
 
 		try {
 			const jsonData = json ? JSON.parse(json) : {};
-			await updatePageContent(params.id, html || '', css || '', jsonData);
+			const blocksData = contentBlocks ? JSON.parse(contentBlocks) : undefined;
+			await updatePageContent(params.id, html || '', css || '', jsonData, blocksData);
 			return { success: true, message: 'Page saved' };
 		} catch (e) {
 			return fail(400, { error: 'Failed to save page' });

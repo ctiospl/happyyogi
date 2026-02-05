@@ -71,24 +71,32 @@
 			...config
 		});
 
-		// Register custom structured blocks
-		registerCustomBlocks(editor);
-
 		// Add custom commands
 		addCommands(editor);
 
-		// Load initial content
-		if (initialJson) {
-			editor.loadProjectData(initialJson);
-		} else if (initialHtml) {
-			editor.setComponents(initialHtml);
-			if (initialCss) {
-				editor.setStyle(initialCss);
-			}
-		}
+		// Register custom structured blocks (safe to do before load)
+		registerCustomBlocks(editor);
 
-		// Notify parent
-		onLoad?.(editor);
+		// Wait for editor to be ready before loading content
+		editor.on('load', () => {
+			// Load initial content
+			// Check if initialJson is GrapesJS format (has 'pages' or 'components' key)
+			// vs our PageContent format (has 'version' and 'blocks')
+			const isGrapesFormat = initialJson && ('pages' in initialJson || 'assets' in initialJson || ('components' in initialJson && !('blocks' in initialJson)));
+
+			if (initialJson && isGrapesFormat) {
+				editor.loadProjectData(initialJson);
+			} else if (initialHtml) {
+				editor.setComponents(initialHtml);
+				if (initialCss) {
+					editor.setStyle(initialCss);
+				}
+			}
+			// If initialJson is our PageContent format, skip loading (start fresh in editor)
+
+			// Notify parent
+			onLoad?.(editor);
+		});
 	});
 
 	onDestroy(() => {

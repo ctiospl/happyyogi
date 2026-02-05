@@ -23,14 +23,17 @@
 	let seoTitle = $state(data.page.seo_title || '');
 	let seoDescription = $state(data.page.seo_description || '');
 
-	// Parse initial JSON content
+	// Parse initial JSON content - extract GrapesJS data if in wrapper format
 	let initialJson: object | undefined;
 	try {
-		initialJson = data.page.content_json
+		const rawJson = data.page.content_json
 			? typeof data.page.content_json === 'string'
 				? JSON.parse(data.page.content_json)
 				: data.page.content_json
 			: undefined;
+		// If in wrapper format {grapes, structured}, extract grapes
+		// Otherwise use as-is (backwards compat)
+		initialJson = rawJson?.grapes ?? rawJson;
 	} catch {
 		initialJson = undefined;
 	}
@@ -48,14 +51,19 @@
 		}
 	}
 
-	async function handleSave(content: { html: string; css: string; json: object }) {
+	async function handleSave(content: { html: string; css: string; json: object; contentBlocks?: object }) {
 		saveStatus = 'saving';
 
 		try {
 			const formData = new FormData();
 			formData.append('html', content.html);
 			formData.append('css', content.css);
+			// Store GrapesJS project data
 			formData.append('json', JSON.stringify(content.json));
+			// Store extracted structured blocks if available
+			if (content.contentBlocks) {
+				formData.append('contentBlocks', JSON.stringify(content.contentBlocks));
+			}
 
 			const res = await fetch('?/save', {
 				method: 'POST',

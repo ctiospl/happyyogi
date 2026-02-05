@@ -92,14 +92,20 @@ export async function updatePageContent(
 	pageId: string,
 	html: string,
 	css: string,
-	json: object
+	grapesJson: object,
+	structuredBlocks?: object
 ): Promise<Page | null> {
 	// Combine HTML and CSS for rendering
 	const contentHtml = css ? `<style>${css}</style>${html}` : html;
 
+	// Store both GrapesJS project data and structured content blocks
+	const contentJson = structuredBlocks
+		? { grapes: grapesJson, structured: structuredBlocks }
+		: grapesJson;
+
 	return updatePage(pageId, {
 		content_html: contentHtml,
-		content_json: JSON.stringify(json)
+		content_json: JSON.stringify(contentJson)
 	});
 }
 

@@ -13,9 +13,11 @@
 			const parsed = typeof data.page.content_json === 'string'
 				? JSON.parse(data.page.content_json)
 				: data.page.content_json;
+			// Check for new wrapper format {grapes, structured}
+			const content = parsed.structured ?? parsed;
 			// Validate it has version and blocks
-			if (parsed.version && Array.isArray(parsed.blocks)) {
-				return parsed as PageContent;
+			if (content.version && Array.isArray(content.blocks)) {
+				return content as PageContent;
 			}
 			return null;
 		} catch {
