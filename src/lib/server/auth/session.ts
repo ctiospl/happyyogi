@@ -1,5 +1,4 @@
 import { db } from '$lib/server/db';
-import { randomBytes } from 'crypto';
 import type { Cookies } from '@sveltejs/kit';
 import type { Session, UserTenantLink } from '$lib/server/db/schema';
 
@@ -20,22 +19,17 @@ export interface SessionData {
 	tenantLink: UserTenantLink | null;
 }
 
-function generateSessionId(): string {
-	return randomBytes(32).toString('hex');
-}
-
 export async function createSession(
 	userId: string,
 	tenantId: string | null,
 	deviceInfo?: { userAgent?: string; ip?: string }
 ): Promise<Session> {
-	const sessionId = generateSessionId();
 	const expiresAt = new Date(Date.now() + SESSION_DURATION_DAYS * 24 * 60 * 60 * 1000);
 
+	// Let DB generate UUID for session ID
 	const [session] = await db
 		.insertInto('sessions')
 		.values({
-			id: sessionId,
 			user_id: userId,
 			tenant_id: tenantId,
 			device_info: deviceInfo ? JSON.stringify(deviceInfo) : null,
