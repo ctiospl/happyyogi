@@ -1,5 +1,6 @@
 import type { PageServerLoad, Actions } from './$types';
 import { getTenantTemplates, createTemplate } from '$lib/server/templates/crud';
+import { seedCoreTemplates, hasCoreTemplates } from '$lib/server/templates/seed';
 import { error, fail, redirect } from '@sveltejs/kit';
 
 export const load: PageServerLoad = async ({ locals }) => {
@@ -12,10 +13,12 @@ export const load: PageServerLoad = async ({ locals }) => {
 	}
 
 	const templates = await getTenantTemplates(locals.tenant.id);
+	const hasCore = await hasCoreTemplates(locals.tenant.id);
 
 	return {
 		templates,
-		tenant: locals.tenant
+		tenant: locals.tenant,
+		hasCoreTemplates: hasCore
 	};
 };
 
@@ -65,5 +68,25 @@ export const actions: Actions = {
 		});
 
 		throw redirect(302, `/admin/templates/${template.id}`);
+	},
+
+	seed: async ({ locals }) => {
+		if (!locals.tenant || locals.tenantLink?.role !== 'admin') {
+			return fail(403, { error: 'Not authorized' });
+		}
+
+		const result = await seedCoreTemplates(locals.tenant.id);
+
+		if (result.errors.length > 0) {
+			return fail(500, {
+				error: `Seeding failed for: ${result.errors.map((e) => e.slug).join(', ')}`,
+				seedResult: result
+			});
+		}
+
+		return {
+			success: true,
+			seedResult: result
+		};
 	}
 };
