@@ -1,9 +1,15 @@
 <script lang="ts">
+	import type { PageData } from './$types';
 	import { contactPage } from '$lib/content/pages/contact';
 	import { SEOHead } from '$lib/components/seo';
 	import { Button } from '$lib/components/ui/button';
 	import { Card, CardContent } from '$lib/components/ui/card';
 	import { Phone, Mail, Instagram, MapPin, Clock } from '@lucide/svelte';
+	import PageRenderer from '$lib/components/PageRenderer.svelte';
+
+	let { data }: { data: PageData } = $props();
+
+	const useStructured = $derived(data.useStructuredContent && data.structuredContent);
 
 	const hero = contactPage.sections.find((s) => s.type === 'hero') as {
 		type: 'hero';
@@ -62,8 +68,14 @@
 	});
 </script>
 
-<SEOHead title={contactPage.seo.title} description={contactPage.seo.description} />
+<SEOHead
+	title={data.seo?.title ?? contactPage.seo.title}
+	description={data.seo?.description ?? contactPage.seo.description}
+/>
 
+{#if useStructured}
+	<PageRenderer content={data.structuredContent} />
+{:else}
 <!-- Hero Section with Image -->
 <section class="relative min-h-[50vh] overflow-hidden">
 	<div class="absolute inset-0">
@@ -219,3 +231,4 @@
 		</div>
 	</div>
 </section>
+{/if}

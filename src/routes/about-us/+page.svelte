@@ -1,10 +1,16 @@
 <script lang="ts">
+	import type { PageData } from './$types';
 	import { aboutPage } from '$lib/content/pages/about';
 	import { SEOHead } from '$lib/components/seo';
 	import { Card, CardContent } from '$lib/components/ui/card';
 	import { Badge } from '$lib/components/ui/badge';
 	import { Button } from '$lib/components/ui/button';
 	import { Heart, BookOpen, Users, Sparkles } from '@lucide/svelte';
+	import PageRenderer from '$lib/components/PageRenderer.svelte';
+
+	let { data }: { data: PageData } = $props();
+
+	const useStructured = $derived(data.useStructuredContent && data.structuredContent);
 
 	const story = aboutPage.sections.find((s) => s.type === 'story')!;
 	const values = aboutPage.sections.find((s) => s.type === 'values-grid')!;
@@ -14,7 +20,14 @@
 	const valueIcons = [Heart, BookOpen, Users, Sparkles];
 </script>
 
-<SEOHead title={aboutPage.seo.title} description={aboutPage.seo.description} />
+<SEOHead
+	title={data.seo?.title ?? aboutPage.seo.title}
+	description={data.seo?.description ?? aboutPage.seo.description}
+/>
+
+{#if useStructured}
+	<PageRenderer content={data.structuredContent} />
+{:else}
 
 <!-- Hero Section with Image -->
 <section class="relative min-h-[60vh] overflow-hidden">
@@ -158,3 +171,4 @@
 		</Button>
 	</div>
 </section>
+{/if}

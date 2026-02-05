@@ -1,8 +1,14 @@
 <script lang="ts">
+	import type { PageData } from './$types';
 	import { SEOHead } from '$lib/components/seo';
 	import { testimonialsPage } from '$lib/content/pages/testimonials';
 	import { Badge } from '$lib/components/ui/badge';
 	import { Quote } from '@lucide/svelte';
+	import PageRenderer from '$lib/components/PageRenderer.svelte';
+
+	let { data }: { data: PageData } = $props();
+
+	const useStructured = $derived(data.useStructuredContent && data.structuredContent);
 
 	const { seo, testimonials } = testimonialsPage;
 
@@ -39,8 +45,14 @@
 	}
 </script>
 
-<SEOHead title={seo.title} description={seo.description} />
+<SEOHead
+	title={data.seo?.title ?? seo.title}
+	description={data.seo?.description ?? seo.description}
+/>
 
+{#if useStructured}
+	<PageRenderer content={data.structuredContent} />
+{:else}
 <!-- Hero Section with Image -->
 <section class="relative min-h-[50vh] overflow-hidden">
 	<div class="absolute inset-0">
@@ -138,6 +150,7 @@
 		</a>
 	</div>
 </section>
+{/if}
 
 <style>
 	@keyframes fadeInUp {
