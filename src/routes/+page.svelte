@@ -1,9 +1,16 @@
 <script lang="ts">
+	import type { PageData } from './$types';
 	import { homePage } from '$lib/content/pages';
 	import { SEOHead } from '$lib/components/seo';
 	import { Button } from '$lib/components/ui/button';
 	import { Card, CardContent } from '$lib/components/ui/card';
 	import * as Icons from '@lucide/svelte';
+	import PageRenderer from '$lib/components/PageRenderer.svelte';
+
+	let { data }: { data: PageData } = $props();
+
+	// Use DB content if available, otherwise fallback to hardcoded
+	const useStructured = $derived(data.useStructuredContent && data.structuredContent);
 
 	const hero = homePage.sections.find((s) => s.type === 'hero')!;
 	const services = homePage.sections.find((s) => s.type === 'services-grid')!;
@@ -20,8 +27,8 @@
 		calendar: Icons.Calendar
 	};
 
-	// Instructor data
-	const instructors = [
+	// Instructor data - default fallback
+	const defaultInstructors = [
 		{
 			name: 'Deepa Rao',
 			role: '',
@@ -41,15 +48,16 @@
 			specialty: 'Ashtanga & Inversions'
 		}
 	];
+	const instructors = $derived(data.instructors ?? defaultInstructors);
 </script>
 
 <SEOHead
-	title={homePage.seo.title}
-	description={homePage.seo.description}
+	title={data.seo?.title ?? homePage.seo.title}
+	description={data.seo?.description ?? homePage.seo.description}
 	organization={{
 		name: 'Happy Yogi Shaala',
 		url: 'https://happyyogi.in',
-		description: homePage.seo.description,
+		description: data.seo?.description ?? homePage.seo.description,
 		contactPoint: {
 			telephone: '+919820009173',
 			contactType: 'customer service',
@@ -73,6 +81,9 @@
 	}}
 />
 
+{#if useStructured && data.structuredContent}
+	<PageRenderer content={data.structuredContent} {instructors} />
+{:else}
 <!-- Hero Section with Divya Teaching Class -->
 <section class="relative min-h-[90vh] overflow-hidden">
 	<!-- Background Image - Divya teaching a full class with depth -->
@@ -342,3 +353,4 @@
 		</div>
 	</div>
 </section>
+{/if}

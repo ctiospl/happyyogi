@@ -1,0 +1,9 @@
+export { default as HeroSection } from './HeroSection.svelte';
+export { default as ServicesGridSection } from './ServicesGridSection.svelte';
+export { default as AboutSnippetSection } from './AboutSnippetSection.svelte';
+export { default as InstructorGridSection } from './InstructorGridSection.svelte';
+export { default as TestimonialCarouselSection } from './TestimonialCarouselSection.svelte';
+export { default as CtaBannerSection } from './CtaBannerSection.svelte';
+export { default as ValuesGridSection } from './ValuesGridSection.svelte';
+export { default as StorySection } from './StorySection.svelte';
+export { default as HtmlSection } from './HtmlSection.svelte';

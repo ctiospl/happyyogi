@@ -2,12 +2,15 @@
 	import { onMount, onDestroy } from 'svelte';
 	import type grapesjs from 'grapesjs';
 	import type { Editor, EditorConfig } from 'grapesjs';
+	import type { PageContent } from '$lib/types';
+	import { registerCustomBlocks } from './blocks';
+	import { extractBlocks } from './utils/extract-blocks';
 
 	interface Props {
 		initialHtml?: string;
 		initialCss?: string;
 		initialJson?: object;
-		onSave?: (data: { html: string; css: string; json: object }) => void;
+		onSave?: (data: { html: string; css: string; json: object; contentBlocks?: PageContent }) => void;
 		onLoad?: (editor: Editor) => void;
 		config?: Partial<EditorConfig>;
 		class?: string;
@@ -68,11 +71,11 @@
 			...config
 		});
 
+		// Register custom structured blocks
+		registerCustomBlocks(editor);
+
 		// Add custom commands
 		addCommands(editor);
-
-		// Add default components
-		addDefaultComponents(editor);
 
 		// Load initial content
 		if (initialJson) {
@@ -255,10 +258,13 @@
 		ed.Commands.add('save-page', {
 			run: () => {
 				if (onSave) {
+					const projectData = ed.getProjectData();
+					const contentBlocks = extractBlocks(projectData as Parameters<typeof extractBlocks>[0]);
 					onSave({
 						html: ed.getHtml(),
 						css: ed.getCss() || '',
-						json: ed.getProjectData()
+						json: projectData,
+						contentBlocks
 					});
 				}
 			}
@@ -272,10 +278,6 @@
 				ed.stopCommand('sw-visibility');
 			}
 		});
-	}
-
-	function addDefaultComponents(ed: Editor) {
-		// Add custom component types if needed
 	}
 
 	export function getEditor(): Editor | null {

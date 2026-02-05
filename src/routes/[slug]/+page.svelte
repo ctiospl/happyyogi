@@ -1,8 +1,27 @@
 <script lang="ts">
 	import type { PageData } from './$types';
+	import type { PageContent } from '$lib/types';
 	import { Badge } from '$lib/components/ui/badge';
+	import PageRenderer from '$lib/components/PageRenderer.svelte';
 
 	let { data }: { data: PageData } = $props();
+
+	// Parse structured content if available
+	const structuredContent = $derived.by(() => {
+		if (!data.page.content_json) return null;
+		try {
+			const parsed = typeof data.page.content_json === 'string'
+				? JSON.parse(data.page.content_json)
+				: data.page.content_json;
+			// Validate it has version and blocks
+			if (parsed.version && Array.isArray(parsed.blocks)) {
+				return parsed as PageContent;
+			}
+			return null;
+		} catch {
+			return null;
+		}
+	});
 </script>
 
 <svelte:head>
@@ -23,7 +42,9 @@
 {/if}
 
 <div class="page-content">
-	{#if data.page.content_html}
+	{#if structuredContent?.blocks}
+		<PageRenderer content={structuredContent} />
+	{:else if data.page.content_html}
 		{@html data.page.content_html}
 	{:else}
 		<div class="container mx-auto px-4 py-20 text-center">
