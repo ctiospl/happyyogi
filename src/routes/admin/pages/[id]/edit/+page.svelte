@@ -23,19 +23,22 @@
 	let seoTitle = $state(data.page.seo_title || '');
 	let seoDescription = $state(data.page.seo_description || '');
 
-	// Parse initial JSON content - extract GrapesJS data if in wrapper format
+	// Parse initial JSON content - extract GrapesJS and structured data
 	let initialJson: object | undefined;
+	let initialStructured: object | undefined;
 	try {
 		const rawJson = data.page.content_json
 			? typeof data.page.content_json === 'string'
 				? JSON.parse(data.page.content_json)
 				: data.page.content_json
 			: undefined;
-		// If in wrapper format {grapes, structured}, extract grapes
+		// If in wrapper format {grapes, structured}, extract both
 		// Otherwise use as-is (backwards compat)
 		initialJson = rawJson?.grapes ?? rawJson;
+		initialStructured = rawJson?.structured;
 	} catch {
 		initialJson = undefined;
+		initialStructured = undefined;
 	}
 
 	// Extract HTML and CSS from content_html (CSS is embedded in style tags)
@@ -204,6 +207,7 @@
 			{initialHtml}
 			{initialCss}
 			initialJson={initialJson}
+			initialStructured={initialStructured}
 			onSave={handleSave}
 		/>
 	</div>

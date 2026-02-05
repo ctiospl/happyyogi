@@ -5,11 +5,14 @@
 	import type { PageContent } from '$lib/types';
 	import { registerCustomBlocks } from './blocks';
 	import { extractBlocks } from './utils/extract-blocks';
+	import { contentToGrapesProject, isPageContent } from './utils/content-to-grapes';
 
 	interface Props {
 		initialHtml?: string;
 		initialCss?: string;
 		initialJson?: object;
+		initialStructured?: object;
+		themeCSS?: string;
 		onSave?: (data: { html: string; css: string; json: object; contentBlocks?: PageContent }) => void;
 		onLoad?: (editor: Editor) => void;
 		config?: Partial<EditorConfig>;
@@ -20,6 +23,8 @@
 		initialHtml = '',
 		initialCss = '',
 		initialJson,
+		initialStructured,
+		themeCSS = '',
 		onSave,
 		onLoad,
 		config = {},
@@ -34,12 +39,21 @@
 		const grapesjs = (await import('grapesjs')).default;
 		await import('grapesjs/dist/css/grapes.min.css');
 
+		// Build canvas styles array - inject theme CSS into iframe
+		const canvasStyles: string[] = [
+			// Google Fonts
+			'https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,300..900;1,9..144,300..900&family=DM+Sans:ital,wght@0,400..700;1,400..700&display=swap'
+		];
+
 		const defaultConfig: EditorConfig = {
 			container: editorContainer,
 			height: '100%',
 			width: 'auto',
 			storageManager: false,
 			panels: { defaults: [] },
+			canvas: {
+				styles: canvasStyles
+			},
 			deviceManager: {
 				devices: [
 					{ name: 'Desktop', width: '' },
@@ -79,20 +93,30 @@
 
 		// Wait for editor to be ready before loading content
 		editor.on('load', () => {
-			// Load initial content
-			// Check if initialJson is GrapesJS format (has 'pages' or 'components' key)
-			// vs our PageContent format (has 'version' and 'blocks')
+			// Priority:
+			// 1. GrapesJS project data (if available and valid)
+			// 2. Structured PageContent (convert to GrapesJS) - check both initialStructured AND initialJson
+			// 3. Raw HTML/CSS fallback
+
 			const isGrapesFormat = initialJson && ('pages' in initialJson || 'assets' in initialJson || ('components' in initialJson && !('blocks' in initialJson)));
 
+			// Check if initialJson is actually PageContent format (backwards compat)
+			const structuredContent = initialStructured || (isPageContent(initialJson) ? initialJson : null);
+
 			if (initialJson && isGrapesFormat) {
+				// Load existing GrapesJS project data
 				editor.loadProjectData(initialJson);
+			} else if (structuredContent && isPageContent(structuredContent)) {
+				// Convert structured content to GrapesJS format
+				const grapesProject = contentToGrapesProject(structuredContent);
+				editor.loadProjectData(grapesProject);
 			} else if (initialHtml) {
+				// Fallback to raw HTML
 				editor.setComponents(initialHtml);
 				if (initialCss) {
 					editor.setStyle(initialCss);
 				}
 			}
-			// If initialJson is our PageContent format, skip loading (start fresh in editor)
 
 			// Notify parent
 			onLoad?.(editor);
