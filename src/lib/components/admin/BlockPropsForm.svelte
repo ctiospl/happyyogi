@@ -7,6 +7,7 @@
 	import { Button } from '$lib/components/ui/button';
 	import * as Select from '$lib/components/ui/select';
 	import { Plus, Trash2 } from '@lucide/svelte';
+	import ImageUpload from './ImageUpload.svelte';
 
 	interface Props {
 		fields: TemplateSchemaField[];
@@ -107,19 +108,10 @@
 		{:else if field.type === 'image'}
 			<div>
 				<Label for={id}>{field.label}</Label>
-				<Input
-					{id}
+				<ImageUpload
 					value={(getValue(field.key) as string) ?? ''}
-					placeholder={field.placeholder || 'Image URL'}
-					oninput={(e: Event) => setValue(field.key, (e.target as HTMLInputElement).value)}
+					onchange={(url) => setValue(field.key, url)}
 				/>
-				{#if getValue(field.key)}
-					<img
-						src={getValue(field.key) as string}
-						alt="Preview"
-						class="mt-2 h-20 w-auto rounded border object-cover"
-					/>
-				{/if}
 			</div>
 
 		{:else if field.type === 'select' && field.options}

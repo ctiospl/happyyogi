@@ -11,24 +11,93 @@ import { getTenantTemplates } from '$lib/server/templates/crud';
 import { randomUUID } from 'crypto';
 
 // Import existing content
-// Note: servicesPage and contactPage not imported - their structured versions lose significant content
 import { homePage } from '$lib/content/pages/home';
 import { aboutPage } from '$lib/content/pages/about';
 import { testimonialsPage } from '$lib/content/pages/testimonials';
+import { servicesPage } from '$lib/content/pages/services';
+import { contactPage } from '$lib/content/pages/contact';
 
 // ============================================
 // CONTENT CONVERTERS
 // ============================================
 
-/**
- * Convert home page sections to ContentBlock format
- */
 function convertHomePageBlocks(): ContentBlock[] {
-	return homePage.sections.map((section, index) => ({
-		...section,
-		id: section.id || `block-${index}`,
-		order: index
-	})) as ContentBlock[];
+	const blocks: ContentBlock[] = [
+		{
+			id: 'hero',
+			type: 'hero',
+			order: 0,
+			headline: homePage.sections[0].headline,
+			subheadline: homePage.sections[0].subheadline,
+			backgroundImage: '/images/hero-divya-indian.jpg',
+			cta: homePage.sections[0].cta,
+			secondaryCta: homePage.sections[0].secondaryCta,
+			location: homePage.sections[0].location
+		},
+		{
+			id: 'services',
+			type: 'services-grid',
+			order: 1,
+			headline: homePage.sections[1].headline,
+			subheadline: (homePage.sections[1] as any).subheadline,
+			featureImage: '/images/deepa-teaching.jpg',
+			services: (homePage.sections[1] as any).services
+		},
+		{
+			id: 'about',
+			type: 'about-snippet',
+			order: 2,
+			headline: homePage.sections[2].headline,
+			content: (homePage.sections[2] as any).content,
+			highlights: (homePage.sections[2] as any).highlights,
+			image: '/images/vijesh-pose.jpg',
+			stats: [{ value: '500+', label: 'Happy Students' }],
+			cta: (homePage.sections[2] as any).cta
+		},
+		{
+			id: 'instructors',
+			type: 'instructor-grid',
+			order: 3,
+			heading: 'Meet Our Teachers',
+			subheading: 'Certified practitioners with diverse backgrounds and shared dedication',
+			instructors: [
+				{
+					name: 'Divya Rao',
+					image: '/images/instructors/divya-rao.webp',
+					specializations: ['Hatha Yoga', 'Ashtanga Vinyasa']
+				},
+				{
+					name: 'Deepa Rao',
+					image: '/images/instructors/deepa-rao.webp',
+					specializations: ['Ashtanga Vinyasa', 'Iyengar Yoga']
+				},
+				{
+					name: 'Vijesh Nair',
+					image: '/images/instructors/vijesh-nair.webp',
+					specializations: ['Yoga for Sports', 'Conditioning']
+				}
+			]
+		},
+		{
+			id: 'testimonials',
+			type: 'testimonial-carousel',
+			order: 4,
+			headline: (homePage.sections[3] as any).headline,
+			testimonials: (homePage.sections[3] as any).testimonials
+		},
+		{
+			id: 'cta-banner',
+			type: 'cta-banner',
+			order: 5,
+			headline: homePage.sections[4].headline,
+			subheadline: (homePage.sections[4] as any).subheadline,
+			backgroundImage: '/images/divya-meditation.jpg',
+			showInstructors: true,
+			cta: (homePage.sections[4] as any).cta,
+			secondaryCta: (homePage.sections[4] as any).secondaryCta
+		}
+	];
+	return blocks;
 }
 
 /**
@@ -36,35 +105,55 @@ function convertHomePageBlocks(): ContentBlock[] {
  * Handles field name differences between content files and ContentBlock types
  */
 function convertAboutPageBlocks(): ContentBlock[] {
-	return aboutPage.sections.map((section, index) => {
-		const base = {
-			id: section.id || `block-${index}`,
-			order: index,
-			type: section.type
-		};
+	const storySection = aboutPage.sections[0];
+	const valuesSection = aboutPage.sections[1];
+	const instructorsSection = aboutPage.sections[2];
+	const ctaSection = aboutPage.sections[3];
 
-		// Handle cta-banner which uses 'heading' instead of 'headline' in about content
-		if (section.type === 'cta-banner' && 'heading' in section) {
-			return {
-				...base,
-				type: 'cta-banner' as const,
-				headline: section.heading,
-				subheadline: section.subheadline,
-				cta: section.cta
-			};
+	return [
+		{
+			id: 'hero',
+			type: 'hero',
+			order: 0,
+			headline: 'About Us',
+			subheadline: 'An Urban Oasis in the Heart of Mumbai',
+			backgroundImage: '/images/about-hero.jpg'
+		},
+		{
+			id: storySection.id,
+			type: storySection.type,
+			order: 1,
+			heading: storySection.heading,
+			subheading: storySection.subheading,
+			content: storySection.content
+		},
+		{
+			id: valuesSection.id,
+			type: valuesSection.type,
+			order: 2,
+			heading: valuesSection.heading,
+			values: valuesSection.values
+		},
+		{
+			id: instructorsSection.id,
+			type: instructorsSection.type,
+			order: 3,
+			heading: instructorsSection.heading,
+			subheading: instructorsSection.subheading,
+			instructors: instructorsSection.instructors
+		},
+		{
+			id: ctaSection.id,
+			type: 'cta-banner',
+			order: 4,
+			headline: ctaSection.heading,
+			subheadline: ctaSection.subheadline,
+			backgroundImage: '/images/meditation-hands.jpg',
+			cta: ctaSection.cta
 		}
-
-		return { ...section, ...base };
-	}) as ContentBlock[];
+	] as ContentBlock[];
 }
 
-// Note: convertServicesPageBlocks and convertContactPageBlocks removed
-// Services page loses schedule table, contact page loses form/location/hours
-// These pages continue using hardcoded content from their respective .ts files
-
-/**
- * Convert testimonials/success-stories page to ContentBlock format
- */
 function convertTestimonialsPageBlocks(): ContentBlock[] {
 	return [
 		{
@@ -73,7 +162,8 @@ function convertTestimonialsPageBlocks(): ContentBlock[] {
 			order: 0,
 			headline: 'Success Stories',
 			subheadline:
-				'Read inspiring transformation stories from our students. Discover how yoga has changed lives.'
+				'Read inspiring transformation stories from our students. Discover how yoga has changed lives.',
+			backgroundImage: '/images/success-stories-hero.jpg'
 		},
 		{
 			id: 'testimonials',
@@ -92,9 +182,98 @@ function convertTestimonialsPageBlocks(): ContentBlock[] {
 			order: 2,
 			headline: 'Start Your Journey',
 			subheadline: 'Join our community and experience the transformation yourself.',
+			backgroundImage: '/images/meditation-hands.jpg',
 			cta: {
 				text: 'Get Started',
 				href: '/contact'
+			}
+		}
+	];
+}
+
+/**
+ * Convert services page to ContentBlock format.
+ * Maps hero, services-grid, and cta sections. Schedule table has no template equivalent.
+ */
+function convertServicesPageBlocks(): ContentBlock[] {
+	const { sections } = servicesPage;
+	return [
+		{
+			id: 'hero',
+			type: 'hero',
+			order: 0,
+			headline: sections.hero.headline,
+			subheadline: sections.hero.tagline,
+			backgroundImage: '/images/services-hero.jpg'
+		},
+		{
+			id: 'services',
+			type: 'services-grid',
+			order: 1,
+			headline: 'Our Services',
+			subheadline: sections.hero.tagline,
+			services: sections.services.map((s) => ({
+				title: s.title,
+				description: s.description,
+				icon: s.icon,
+				href: `/services/${s.id}`
+			}))
+		},
+		{
+			id: 'cta',
+			type: 'cta-banner',
+			order: 2,
+			headline: sections.cta.title,
+			subheadline: sections.cta.description,
+			cta: {
+				text: sections.cta.primaryButton.label,
+				href: sections.cta.primaryButton.href
+			},
+			...(sections.cta.secondaryButton
+				? {
+						secondaryCta: {
+							text: sections.cta.secondaryButton.label,
+							href: sections.cta.secondaryButton.href
+						}
+					}
+				: {})
+		}
+	];
+}
+
+/**
+ * Convert contact page to ContentBlock format.
+ * Maps hero and cta. Contact-info, location, form, hours have no template equivalents.
+ */
+function convertContactPageBlocks(): ContentBlock[] {
+	const heroSection = contactPage.sections.find((s) => s.type === 'hero') as
+		| { type: 'hero'; heading: string; subheading: string; tagline: string }
+		| undefined;
+	return [
+		{
+			id: 'hero',
+			type: 'hero',
+			order: 0,
+			headline: heroSection?.heading ?? 'Contact Us',
+			subheadline:
+				heroSection?.subheading ??
+				'Reach out for class inquiries, workshop registrations, or any questions',
+			backgroundImage: '/images/contact-studio.jpg'
+		},
+		{
+			id: 'cta',
+			type: 'cta-banner',
+			order: 1,
+			headline: 'Get in Touch',
+			subheadline:
+				'Visit us at Sportsmed Mumbai, Parel West, or reach out via phone, email, or Instagram.',
+			cta: {
+				text: 'Call Us',
+				href: 'tel:+919820009173'
+			},
+			secondaryCta: {
+				text: 'Email Us',
+				href: 'mailto:info@thehappyyogico.com'
 			}
 		}
 	];
@@ -112,8 +291,6 @@ interface PageDefinition {
 	getBlocks: () => ContentBlock[];
 }
 
-// Note: 'services' and 'contact' excluded - their structured versions lose significant content
-// (schedule table, contact form, location/hours sections). They continue using hardcoded content.
 const pageDefinitions: PageDefinition[] = [
 	{
 		slug: 'home',
@@ -135,6 +312,20 @@ const pageDefinitions: PageDefinition[] = [
 		seoTitle: testimonialsPage.seo.title,
 		seoDescription: testimonialsPage.seo.description,
 		getBlocks: convertTestimonialsPageBlocks
+	},
+	{
+		slug: 'services',
+		title: 'Our Services',
+		seoTitle: servicesPage.seo.title,
+		seoDescription: servicesPage.seo.description,
+		getBlocks: convertServicesPageBlocks
+	},
+	{
+		slug: 'contact',
+		title: 'Contact Us',
+		seoTitle: contactPage.seo.title,
+		seoDescription: contactPage.seo.description,
+		getBlocks: convertContactPageBlocks
 	}
 ];
 
@@ -184,9 +375,12 @@ export interface PageSeedResult {
 /**
  * Seed core pages for a tenant.
  * Creates pages with both content_json and blocks (template-backed PageBlock[]).
- * If a page exists but has empty blocks, populates blocks.
+ * @param force - If true, overwrites existing blocks even if non-empty
  */
-export async function seedCorePages(tenantId: string): Promise<PageSeedResult> {
+export async function seedCorePages(
+	tenantId: string,
+	{ force = false }: { force?: boolean } = {}
+): Promise<PageSeedResult> {
 	const result: PageSeedResult = {
 		created: [],
 		updated: [],
@@ -205,9 +399,8 @@ export async function seedCorePages(tenantId: string): Promise<PageSeedResult> {
 			const pageBlocks = contentBlocksToPageBlocks(contentBlocks, templateMap);
 
 			if (existing) {
-				// Update blocks on existing page if empty
 				const existingBlocks = parseBlocks(existing.blocks);
-				if (existingBlocks.length === 0 && pageBlocks.length > 0) {
+				if (force || (existingBlocks.length === 0 && pageBlocks.length > 0)) {
 					await updatePage(existing.id, {
 						blocks: JSON.stringify(pageBlocks) as any
 					});
