@@ -1,6 +1,6 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
-	import { generateSiteCSS } from '$lib/components/page-builder/utils/site-css';
+	import { generateSiteCSS } from '$lib/styles/site-css';
 
 	interface Props {
 		html?: string;
@@ -14,11 +14,21 @@
 	let iframe: HTMLIFrameElement;
 	let siteCSS = '';
 
+	type DeviceSize = 'desktop' | 'tablet' | 'mobile';
+	let activeDevice: DeviceSize = $state('desktop');
+
+	const devices: { key: DeviceSize; label: string; width: string; icon: string }[] = [
+		{ key: 'desktop', label: 'Desktop', width: '100%', icon: '🖥' },
+		{ key: 'tablet', label: 'Tablet', width: '768px', icon: '📱' },
+		{ key: 'mobile', label: 'Mobile', width: '375px', icon: '📲' }
+	];
+
+	const activeWidth = $derived(devices.find((d) => d.key === activeDevice)?.width ?? '100%');
+
 	onMount(() => {
 		siteCSS = generateSiteCSS();
 	});
 
-	// Update iframe content when html/css changes
 	$effect(() => {
 		if (iframe && !error) {
 			updateIframeContent();
@@ -55,6 +65,20 @@
 </script>
 
 <div class="preview-frame {className}">
+	<div class="device-toolbar">
+		{#each devices as device}
+			<button
+				class="device-btn"
+				class:active={activeDevice === device.key}
+				onclick={() => (activeDevice = device.key)}
+				title={device.label}
+			>
+				<span class="device-icon">{device.icon}</span>
+				<span class="device-label">{device.label}</span>
+			</button>
+		{/each}
+	</div>
+
 	{#if error}
 		<div class="preview-error">
 			<div class="error-icon">!</div>
@@ -64,12 +88,14 @@
 			</div>
 		</div>
 	{:else}
-		<iframe
-			bind:this={iframe}
-			title="Template Preview"
-			sandbox="allow-same-origin"
-			class="preview-iframe"
-		></iframe>
+		<div class="iframe-wrapper">
+			<iframe
+				bind:this={iframe}
+				title="Template Preview"
+				class="preview-iframe"
+				style:width={activeWidth}
+			></iframe>
+		</div>
 	{/if}
 </div>
 
@@ -77,15 +103,67 @@
 	.preview-frame {
 		width: 100%;
 		height: 100%;
-		background: white;
+		display: flex;
+		flex-direction: column;
+		background: #1e1e1e;
 		border-radius: 8px;
 		overflow: hidden;
 	}
 
+	.device-toolbar {
+		display: flex;
+		gap: 2px;
+		padding: 6px 8px;
+		background: #2d2d2d;
+		border-bottom: 1px solid #3d3d3d;
+		flex-shrink: 0;
+	}
+
+	.device-btn {
+		display: flex;
+		align-items: center;
+		gap: 4px;
+		padding: 4px 10px;
+		border: none;
+		border-radius: 4px;
+		background: transparent;
+		color: #999;
+		font-size: 12px;
+		cursor: pointer;
+		transition: all 0.15s ease;
+	}
+
+	.device-btn:hover {
+		background: #3d3d3d;
+		color: #ccc;
+	}
+
+	.device-btn.active {
+		background: #4d4d4d;
+		color: #fff;
+	}
+
+	.device-icon {
+		font-size: 14px;
+	}
+
+	.device-label {
+		font-family: system-ui, sans-serif;
+	}
+
+	.iframe-wrapper {
+		flex: 1;
+		display: flex;
+		justify-content: center;
+		overflow: auto;
+		background: #f5f5f5;
+	}
+
 	.preview-iframe {
-		width: 100%;
 		height: 100%;
 		border: none;
+		background: white;
+		transition: width 0.2s ease;
 	}
 
 	.preview-error {

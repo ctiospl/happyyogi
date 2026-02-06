@@ -2,7 +2,6 @@
 	import type { PageData, ActionData } from './$types';
 	import { enhance } from '$app/forms';
 	import type { PageBlock } from '$lib/server/db/schema';
-	import PageBuilder from '$lib/components/page-builder/PageBuilder.svelte';
 	import PageBlockEditor from '$lib/components/admin/PageBlockEditor.svelte';
 	import { Button } from '$lib/components/ui/button';
 	import { Input } from '$lib/components/ui/input';
@@ -10,24 +9,19 @@
 	import { Textarea } from '$lib/components/ui/textarea';
 	import { Badge } from '$lib/components/ui/badge';
 	import * as Sheet from '$lib/components/ui/sheet';
-	import * as Tabs from '$lib/components/ui/tabs';
 	import * as Alert from '$lib/components/ui/alert';
 	import { ArrowLeft, Settings, CheckCircle, AlertCircle, Eye } from '@lucide/svelte';
 
 	let { data, form }: { data: PageData; form: ActionData } = $props();
 
-	let pageBuilder: PageBuilder;
 	let settingsOpen = $state(false);
 	let saveStatus = $state<'idle' | 'saving' | 'saved' | 'error'>('idle');
-	let activeTab = $state('blocks');
 
-	// Form state for settings
 	let title = $state(data.page.title);
 	let slug = $state(data.page.slug);
 	let seoTitle = $state(data.page.seo_title || '');
 	let seoDescription = $state(data.page.seo_description || '');
 
-	// Block editor state
 	let pageBlocks = $state<PageBlock[]>(parseBlocks(data.page.blocks));
 
 	function parseBlocks(raw: unknown): PageBlock[] {
@@ -38,7 +32,6 @@
 		return Array.isArray(raw) ? raw : [];
 	}
 
-	// Hidden form for block saves
 	let blocksForm: HTMLFormElement;
 	let blocksInput: HTMLInputElement;
 
@@ -51,57 +44,6 @@
 		blocksInput.value = JSON.stringify(pageBlocks);
 		saveStatus = 'saving';
 		blocksForm.requestSubmit();
-	}
-
-	// Parse initial JSON content for GrapesJS tab
-	let initialJson: object | undefined;
-	let initialStructured: object | undefined;
-	try {
-		const rawJson = data.page.content_json
-			? typeof data.page.content_json === 'string'
-				? JSON.parse(data.page.content_json)
-				: data.page.content_json
-			: undefined;
-		initialJson = rawJson?.grapes ?? rawJson;
-		initialStructured = rawJson?.structured;
-	} catch {
-		initialJson = undefined;
-		initialStructured = undefined;
-	}
-
-	let initialHtml = '';
-	let initialCss = '';
-	if (data.page.content_html) {
-		const styleMatch = data.page.content_html.match(/<style>([\s\S]*?)<\/style>/);
-		if (styleMatch) {
-			initialCss = styleMatch[1];
-			initialHtml = data.page.content_html.replace(/<style>[\s\S]*?<\/style>/, '');
-		} else {
-			initialHtml = data.page.content_html;
-		}
-	}
-
-	async function handleBuilderSave(content: { html: string; css: string; json: object; contentBlocks?: object }) {
-		saveStatus = 'saving';
-		try {
-			const formData = new FormData();
-			formData.append('html', content.html);
-			formData.append('css', content.css);
-			formData.append('json', JSON.stringify(content.json));
-			if (content.contentBlocks) {
-				formData.append('contentBlocks', JSON.stringify(content.contentBlocks));
-			}
-			const res = await fetch('?/save', { method: 'POST', body: formData });
-			const result = await res.json();
-			if (result.type === 'success') {
-				saveStatus = 'saved';
-				setTimeout(() => (saveStatus = 'idle'), 2000);
-			} else {
-				saveStatus = 'error';
-			}
-		} catch {
-			saveStatus = 'error';
-		}
 	}
 </script>
 
@@ -160,11 +102,9 @@
 				{data.page.status}
 			</Badge>
 
-			{#if activeTab === 'blocks'}
-				<Button variant="default" size="sm" onclick={saveBlocks}>
-					Save Blocks
-				</Button>
-			{/if}
+			<Button variant="default" size="sm" onclick={saveBlocks}>
+				Save
+			</Button>
 
 			<Sheet.Root bind:open={settingsOpen}>
 				<Sheet.Trigger>
@@ -247,34 +187,14 @@
 		</Alert.Root>
 	{/if}
 
-	<!-- Editor tabs -->
-	<Tabs.Root bind:value={activeTab} class="flex flex-1 flex-col overflow-hidden">
-		<div class="border-b px-4">
-			<Tabs.List>
-				<Tabs.Trigger value="blocks">Block Editor</Tabs.Trigger>
-				<Tabs.Trigger value="builder">Visual Builder</Tabs.Trigger>
-			</Tabs.List>
-		</div>
-
-		<Tabs.Content value="blocks" class="flex-1 overflow-auto p-6">
-			<div class="mx-auto max-w-3xl">
-				<PageBlockEditor
-					blocks={pageBlocks}
-					templates={data.templates}
-					onchange={handleBlocksChange}
-				/>
-			</div>
-		</Tabs.Content>
-
-		<Tabs.Content value="builder" class="flex-1">
-			<PageBuilder
-				bind:this={pageBuilder}
-				{initialHtml}
-				{initialCss}
-				initialJson={initialJson}
-				initialStructured={initialStructured}
-				onSave={handleBuilderSave}
+	<!-- Block Editor -->
+	<div class="flex-1 overflow-auto p-6">
+		<div class="mx-auto max-w-3xl">
+			<PageBlockEditor
+				blocks={pageBlocks}
+				templates={data.templates}
+				onchange={handleBlocksChange}
 			/>
-		</Tabs.Content>
-	</Tabs.Root>
+		</div>
+	</div>
 </div>

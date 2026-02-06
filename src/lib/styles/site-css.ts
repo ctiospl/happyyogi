@@ -313,28 +313,8 @@ section {
 `;
 
 /**
- * Generate complete site CSS for GrapesJS canvas injection
+ * Generate complete site CSS for template preview iframe
  */
 export function generateSiteCSS(): string {
 	return CSS_VARIABLES + UTILITY_CLASSES;
-}
-
-/**
- * Inject CSS into GrapesJS canvas iframe
- */
-export function injectCanvasCSS(editor: { Canvas: { getDocument: () => Document | null } }, css: string): void {
-	const doc = editor.Canvas.getDocument();
-	if (!doc) return;
-
-	// Remove existing injected style if present
-	const existingStyle = doc.getElementById('site-css-injection');
-	if (existingStyle) {
-		existingStyle.remove();
-	}
-
-	// Create and inject new style element
-	const styleEl = doc.createElement('style');
-	styleEl.id = 'site-css-injection';
-	styleEl.textContent = css;
-	doc.head.appendChild(styleEl);
 }

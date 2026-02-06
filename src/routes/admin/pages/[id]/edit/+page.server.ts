@@ -1,5 +1,5 @@
 import type { PageServerLoad, Actions } from './$types';
-import { getPageById, updatePage, updatePageContent, publishPage, unpublishPage, deletePage } from '$lib/server/pages';
+import { getPageById, updatePage, publishPage, unpublishPage, deletePage } from '$lib/server/pages';
 import { getTenantTemplates } from '$lib/server/templates/crud';
 import { error, fail, redirect } from '@sveltejs/kit';
 
@@ -28,27 +28,6 @@ export const load: PageServerLoad = async ({ params, locals }) => {
 };
 
 export const actions: Actions = {
-	save: async ({ request, params, locals }) => {
-		if (!locals.tenant || locals.tenantLink?.role !== 'admin') {
-			return fail(403, { error: 'Not authorized' });
-		}
-
-		const formData = await request.formData();
-		const html = formData.get('html') as string;
-		const css = formData.get('css') as string;
-		const json = formData.get('json') as string;
-		const contentBlocks = formData.get('contentBlocks') as string;
-
-		try {
-			const jsonData = json ? JSON.parse(json) : {};
-			const blocksData = contentBlocks ? JSON.parse(contentBlocks) : undefined;
-			await updatePageContent(params.id, html || '', css || '', jsonData, blocksData);
-			return { success: true, message: 'Page saved' };
-		} catch (e) {
-			return fail(400, { error: 'Failed to save page' });
-		}
-	},
-
 	updateMeta: async ({ request, params, locals }) => {
 		if (!locals.tenant || locals.tenantLink?.role !== 'admin') {
 			return fail(403, { error: 'Not authorized' });
