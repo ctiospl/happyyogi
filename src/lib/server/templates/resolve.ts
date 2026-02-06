@@ -8,7 +8,13 @@
 
 import type { PageBlock } from '$lib/server/db/schema';
 import type { PageContent, ContentBlock } from '$lib/types';
-import { getTemplatesByIds, extractStyleBlock } from './crud';
+import { getTemplatesByIds, extractStyleBlock, extractHtmlMarkup } from './crud';
+
+/** Known section types that PageRenderer has dedicated components for */
+const KNOWN_SECTION_TYPES = new Set([
+	'hero', 'services-grid', 'about-snippet', 'instructor-grid',
+	'testimonial-carousel', 'cta-banner', 'values-grid', 'story', 'html'
+]);
 
 export interface ResolveResult {
 	content: PageContent;
@@ -42,12 +48,26 @@ export async function resolvePageBlocks(blocks: PageBlock[]): Promise<ResolveRes
 			if (css) cssParts.push(css);
 		}
 
-		contentBlocks.push({
-			type: template.slug,
-			id: block.id,
-			order: i,
-			...block.props
-		} as ContentBlock);
+		if (KNOWN_SECTION_TYPES.has(template.slug)) {
+			// Known section type — pass props directly to dedicated component
+			contentBlocks.push({
+				type: template.slug,
+				id: block.id,
+				order: i,
+				...block.props
+			} as ContentBlock);
+		} else {
+			// Unknown type (e.g. layout templates) — pre-render to HTML via AST
+			const html = template.source_code
+				? extractHtmlMarkup(template.source_code, block.props as Record<string, unknown>)
+				: '';
+			contentBlocks.push({
+				type: 'html',
+				id: block.id,
+				order: i,
+				html
+			} as ContentBlock);
+		}
 	}
 
 	return {

@@ -526,7 +526,7 @@ function renderNode(node: any, scope: Scope): string {
  * Parses template with svelte/compiler, walks the AST, and evaluates
  * expressions against sample data for accurate preview output.
  */
-function extractHtmlMarkup(source: string, data: Record<string, unknown>): string {
+export function extractHtmlMarkup(source: string, data: Record<string, unknown>): string {
 	try {
 		const ast = parse(source, { modern: true });
 
