@@ -1,5 +1,5 @@
 import type { PageServerLoad, Actions } from './$types';
-import { getTemplateById, updateTemplate, deleteTemplate } from '$lib/server/templates/crud';
+import { getTemplateById, updateTemplate, deleteTemplate, saveDraft, publishTemplate } from '$lib/server/templates/crud';
 import { error, fail, redirect } from '@sveltejs/kit';
 import type { TemplateSchema } from '$lib/server/db/schema';
 
@@ -75,6 +75,53 @@ export const actions: Actions = {
 			success: true,
 			template
 		};
+	},
+
+	saveDraft: async ({ request, params, locals }) => {
+		if (!locals.tenant || locals.tenantLink?.role !== 'admin') {
+			return fail(403, { error: 'Not authorized' });
+		}
+
+		const formData = await request.formData();
+		const sourceCode = formData.get('source_code') as string;
+		const schemaJson = formData.get('schema') as string;
+		const sampleDataJson = formData.get('sample_data') as string;
+
+		if (!sourceCode) {
+			return fail(400, { error: 'Source code is required' });
+		}
+
+		let schema: TemplateSchema = { fields: [] };
+		let sampleData: Record<string, unknown> = {};
+		try {
+			if (schemaJson) schema = JSON.parse(schemaJson);
+			if (sampleDataJson) sampleData = JSON.parse(sampleDataJson);
+		} catch {
+			return fail(400, { error: 'Invalid JSON in schema or sample data' });
+		}
+
+		// Save draft source_code + update schema/sample_data
+		await saveDraft(params.id, sourceCode);
+		await updateTemplate(params.id, { schema, sample_data: sampleData });
+
+		return { success: true, action: 'draft' };
+	},
+
+	publish: async ({ params, locals }) => {
+		if (!locals.tenant || locals.tenantLink?.role !== 'admin') {
+			return fail(403, { error: 'Not authorized' });
+		}
+
+		const template = await publishTemplate(params.id);
+		if (!template) {
+			return fail(404, { error: 'Template not found' });
+		}
+
+		if (template.compile_error) {
+			return fail(400, { error: `Publish failed: ${template.compile_error}` });
+		}
+
+		return { success: true, action: 'publish', template };
 	},
 
 	delete: async ({ params, locals }) => {

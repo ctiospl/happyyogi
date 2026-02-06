@@ -338,8 +338,10 @@ export interface TemplatesTable {
 	description: string | null;
 	category: TemplateCategory;
 
-	// Source code
+	// Source code (published = used by frontend rendering)
 	source_code: string;
+	// Draft source code (work-in-progress, used by admin preview)
+	draft_source_code: string | null;
 
 	// Compiled output
 	compiled_js: string | null;

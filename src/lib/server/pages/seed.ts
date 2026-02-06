@@ -3,8 +3,12 @@
  * Creates pages in DB with structured blocks format
  */
 
-import { createPage, getPageBySlug } from '$lib/server/pages';
+import { createPage, getPageBySlug, updatePage } from '$lib/server/pages';
 import type { PageContent, ContentBlock } from '$lib/types';
+import type { PageBlock } from '$lib/server/db/schema';
+import { seedCoreTemplates } from '$lib/server/templates/seed';
+import { getTenantTemplates } from '$lib/server/templates/crud';
+import { randomUUID } from 'crypto';
 
 // Import existing content
 // Note: servicesPage and contactPage not imported - their structured versions lose significant content
@@ -135,46 +139,91 @@ const pageDefinitions: PageDefinition[] = [
 ];
 
 // ============================================
+// CONTENT → PAGEBLOCK CONVERTER
+// ============================================
+
+function contentBlocksToPageBlocks(
+	contentBlocks: ContentBlock[],
+	templateMap: Map<string, string>
+): PageBlock[] {
+	const pageBlocks: PageBlock[] = [];
+	for (const block of contentBlocks) {
+		const templateId = templateMap.get(block.type);
+		if (!templateId) continue;
+		// eslint-disable-next-line @typescript-eslint/no-unused-vars
+		const { type, id, order, ...props } = block;
+		pageBlocks.push({
+			id: id || randomUUID(),
+			template_id: templateId,
+			props: props as Record<string, unknown>
+		});
+	}
+	return pageBlocks;
+}
+
+async function getTemplateMap(tenantId: string): Promise<Map<string, string>> {
+	const existing = await getTenantTemplates(tenantId);
+	if (existing.length > 0) {
+		return new Map(existing.map((t) => [t.slug, t.id]));
+	}
+	const result = await seedCoreTemplates(tenantId);
+	return result.templateMap;
+}
+
+// ============================================
 // SEED FUNCTION
 // ============================================
 
 export interface PageSeedResult {
 	created: string[];
+	updated: string[];
 	skipped: string[];
 	errors: { slug: string; error: string }[];
 }
 
 /**
- * Seed core pages for a tenant
- * Skips pages that already exist
+ * Seed core pages for a tenant.
+ * Creates pages with both content_json and blocks (template-backed PageBlock[]).
+ * If a page exists but has empty blocks, populates blocks.
  */
 export async function seedCorePages(tenantId: string): Promise<PageSeedResult> {
 	const result: PageSeedResult = {
 		created: [],
+		updated: [],
 		skipped: [],
 		errors: []
 	};
 
+	const templateMap = await getTemplateMap(tenantId);
+
 	for (const def of pageDefinitions) {
-		// Check if page exists
 		const existing = await getPageBySlug(tenantId, def.slug);
-		if (existing) {
-			result.skipped.push(def.slug);
-			continue;
-		}
 
 		try {
-			const blocks = def.getBlocks();
-			const structuredContent: PageContent = {
-				version: 1,
-				blocks
-			};
+			const contentBlocks = def.getBlocks();
+			const structuredContent: PageContent = { version: 1, blocks: contentBlocks };
+			const pageBlocks = contentBlocksToPageBlocks(contentBlocks, templateMap);
+
+			if (existing) {
+				// Update blocks on existing page if empty
+				const existingBlocks = parseBlocks(existing.blocks);
+				if (existingBlocks.length === 0 && pageBlocks.length > 0) {
+					await updatePage(existing.id, {
+						blocks: JSON.stringify(pageBlocks) as any
+					});
+					result.updated.push(def.slug);
+				} else {
+					result.skipped.push(def.slug);
+				}
+				continue;
+			}
 
 			await createPage({
 				tenant_id: tenantId,
 				slug: def.slug,
 				title: def.title,
 				content_json: JSON.stringify({ structured: structuredContent }),
+				blocks: JSON.stringify(pageBlocks) as any,
 				seo_title: def.seoTitle,
 				seo_description: def.seoDescription,
 				status: 'published',
@@ -192,6 +241,14 @@ export async function seedCorePages(tenantId: string): Promise<PageSeedResult> {
 	}
 
 	return result;
+}
+
+function parseBlocks(raw: unknown): PageBlock[] {
+	if (!raw) return [];
+	if (typeof raw === 'string') {
+		try { return JSON.parse(raw); } catch { return []; }
+	}
+	return Array.isArray(raw) ? raw : [];
 }
 
 /** Core page slugs that should exist for a tenant */

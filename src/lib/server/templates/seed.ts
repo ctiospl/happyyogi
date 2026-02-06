@@ -3,7 +3,7 @@
  * Converts TypeScript interfaces to TemplateSchema format
  */
 
-import { createTemplate, getTenantTemplates } from './crud';
+import { createTemplate, getTenantTemplates, updateTemplate } from './crud';
 import type { TemplateSchema, TemplateSchemaField } from '$lib/server/db/schema';
 
 // Sample data from existing content files
@@ -200,7 +200,7 @@ const heroSource = `<script>
   <div class="container relative z-10 mx-auto flex min-h-[90vh] items-center px-4 py-20">
     <div class="max-w-2xl">
       <h1 class="mb-6 text-4xl font-bold tracking-tight text-foreground md:text-5xl lg:text-6xl">
-        {@html headline}
+        {headline}
       </h1>
       {#if subheadline}
         <p class="mb-8 text-lg text-muted-foreground md:text-xl">{subheadline}</p>
@@ -263,7 +263,7 @@ const servicesGridSource = `<script>
         {#each services as service}
           <div class="group rounded-lg border bg-card p-6 transition-all hover:shadow-lg hover:-translate-y-1">
             <div class="mb-4 flex h-12 w-12 items-center justify-center rounded-xl bg-primary/10 text-primary transition-colors group-hover:bg-primary group-hover:text-primary-foreground">
-              {@html iconMap[service.icon] || iconMap.activity}
+              {@html \`\${iconMap[service.icon] || iconMap.activity}\`}
             </div>
             <h3 class="mb-2 text-lg font-semibold text-foreground">{service.title}</h3>
             <p class="text-sm text-muted-foreground">{service.description}</p>
@@ -524,7 +524,7 @@ const htmlSource = `<script>
 {#if css}
   {@html \`<style>\${css}</style>\`}
 {/if}
-{@html html}`;
+{@html \`\${html}\`}`;
 
 // ============================================
 // SAMPLE DATA (from existing content)
@@ -657,37 +657,67 @@ const templateDefinitions: TemplateDefinition[] = [
 
 export interface SeedResult {
 	created: string[];
+	updated: string[];
 	skipped: string[];
 	errors: { slug: string; error: string }[];
+	/** slug → template ID mapping for all seeded templates */
+	templateMap: Map<string, string>;
 }
 
 /**
  * Seed core section templates for a tenant
- * Skips templates that already exist
+ * Creates missing templates and updates sample_data/source_code for existing ones
  */
 export async function seedCoreTemplates(tenantId: string): Promise<SeedResult> {
 	const result: SeedResult = {
 		created: [],
+		updated: [],
 		skipped: [],
-		errors: []
+		errors: [],
+		templateMap: new Map()
 	};
 
 	// Get existing templates
 	const existing = await getTenantTemplates(tenantId);
-	const existingSlugs = new Set(existing.map((t) => t.slug));
+	const existingBySlug = new Map(existing.map((t) => [t.slug, t]));
 
 	// Get sample data
 	const sampleData = extractSampleData();
 
-	// Create each template
+	// Create or update each template
 	for (const def of templateDefinitions) {
-		if (existingSlugs.has(def.slug)) {
-			result.skipped.push(def.slug);
+		const newSampleData = sampleData[def.sample_data_key] as Record<string, unknown>;
+		const existingTemplate = existingBySlug.get(def.slug);
+
+		if (existingTemplate) {
+			result.templateMap.set(def.slug, existingTemplate.id);
+
+			// Update sample_data and source_code if they differ
+			const existingSample = existingTemplate.sample_data as Record<string, unknown> | null;
+			const sampleChanged = JSON.stringify(existingSample) !== JSON.stringify(newSampleData);
+			const sourceChanged = existingTemplate.source_code !== def.source_code;
+
+			if (sampleChanged || sourceChanged) {
+				try {
+					await updateTemplate(existingTemplate.id, {
+						...(sampleChanged ? { sample_data: newSampleData } : {}),
+						...(sourceChanged ? { source_code: def.source_code } : {})
+					});
+					result.updated.push(def.slug);
+				} catch (err) {
+					result.errors.push({
+						slug: def.slug,
+						error: err instanceof Error ? err.message : String(err)
+					});
+				}
+			} else {
+				result.skipped.push(def.slug);
+			}
 			continue;
 		}
 
 		try {
-			await createTemplate({
+			const created = await createTemplate({
 				tenant_id: tenantId,
 				slug: def.slug,
 				name: def.name,
@@ -695,10 +725,11 @@ export async function seedCoreTemplates(tenantId: string): Promise<SeedResult> {
 				category: 'section',
 				source_code: def.source_code,
 				schema: def.schema,
-				sample_data: sampleData[def.sample_data_key] as Record<string, unknown>,
+				sample_data: newSampleData,
 				updated_at: new Date()
 			});
 			result.created.push(def.slug);
+			result.templateMap.set(def.slug, created.id);
 		} catch (err) {
 			result.errors.push({
 				slug: def.slug,

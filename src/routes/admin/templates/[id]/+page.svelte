@@ -1,13 +1,13 @@
 <script lang="ts">
 	import type { PageData, ActionData } from './$types';
 	import { enhance } from '$app/forms';
-	import { goto } from '$app/navigation';
 	import TemplateEditor from '$lib/components/template-editor/TemplateEditor.svelte';
 	import { Button } from '$lib/components/ui/button';
 	import { Input } from '$lib/components/ui/input';
 	import { Label } from '$lib/components/ui/label';
+	import { Badge } from '$lib/components/ui/badge';
 	import * as Dialog from '$lib/components/ui/dialog';
-	import { ArrowLeft, Trash2, Settings } from '@lucide/svelte';
+	import { ArrowLeft, Trash2, Settings, Upload, Save } from '@lucide/svelte';
 	import type { TemplateSchema } from '$lib/server/db/schema';
 
 	let { data, form }: { data: PageData; form: ActionData } = $props();
@@ -16,34 +16,41 @@
 	let settingsDialogOpen = $state(false);
 	let templateName = $state(data.template.name);
 	let templateSlug = $state(data.template.slug);
+	let saveStatus = $state<'idle' | 'saving' | 'saved' | 'publishing' | 'published' | 'error'>('idle');
 
-	// Hidden form for save
-	let saveForm: HTMLFormElement;
-	let sourceCodeInput: HTMLInputElement;
-	let schemaInput: HTMLInputElement;
-	let sampleDataInput: HTMLInputElement;
+	const hasDraft = $derived(!!data.template.draft_source_code);
+	const draftStatus = $derived(
+		hasDraft ? 'Unpublished changes' : 'Published'
+	);
+
+	// Hidden forms for save/publish
+	let draftForm: HTMLFormElement;
+	let draftSourceInput: HTMLInputElement;
+	let draftSchemaInput: HTMLInputElement;
+	let draftSampleInput: HTMLInputElement;
 
 	function handleSave(saveData: {
 		source_code: string;
 		schema: TemplateSchema;
 		sample_data: Record<string, unknown>;
 	}) {
-		if (!saveForm || !sourceCodeInput || !schemaInput || !sampleDataInput) return;
-
-		sourceCodeInput.value = saveData.source_code;
-		schemaInput.value = JSON.stringify(saveData.schema);
-		sampleDataInput.value = JSON.stringify(saveData.sample_data);
-		saveForm.requestSubmit();
+		if (!draftForm || !draftSourceInput || !draftSchemaInput || !draftSampleInput) return;
+		draftSourceInput.value = saveData.source_code;
+		draftSchemaInput.value = JSON.stringify(saveData.schema);
+		draftSampleInput.value = JSON.stringify(saveData.sample_data);
+		saveStatus = 'saving';
+		draftForm.requestSubmit();
 	}
 
 	async function handlePreview(
-		source: string
+		source: string,
+		sampleData: Record<string, unknown>
 	): Promise<{ success: boolean; html?: string; css?: string; error?: string }> {
 		try {
 			const response = await fetch('/api/templates/preview', {
 				method: 'POST',
 				headers: { 'Content-Type': 'application/json' },
-				body: JSON.stringify({ source_code: source })
+				body: JSON.stringify({ source_code: source, sample_data: sampleData })
 			});
 			return await response.json();
 		} catch (err) {
@@ -53,30 +60,39 @@
 			};
 		}
 	}
+
+	// Provide draft source to editor if available
+	const editorTemplate = $derived({
+		...data.template,
+		source_code: data.template.draft_source_code || data.template.source_code
+	});
 </script>
 
 <svelte:head>
 	<title>{data.template.name} | Templates | Admin | {data.tenant.name}</title>
 </svelte:head>
 
-<!-- Hidden form for saves -->
+<!-- Hidden form for draft save -->
 <form
-	bind:this={saveForm}
+	bind:this={draftForm}
 	method="POST"
-	action="?/save"
+	action="?/saveDraft"
 	use:enhance={() => {
 		return async ({ result, update }) => {
 			if (result.type === 'success') {
-				// Show success feedback
+				saveStatus = 'saved';
+				setTimeout(() => { saveStatus = 'idle'; }, 2000);
+			} else {
+				saveStatus = 'error';
 			}
 			await update();
 		};
 	}}
 	class="hidden"
 >
-	<input bind:this={sourceCodeInput} type="hidden" name="source_code" />
-	<input bind:this={schemaInput} type="hidden" name="schema" />
-	<input bind:this={sampleDataInput} type="hidden" name="sample_data" />
+	<input bind:this={draftSourceInput} type="hidden" name="source_code" />
+	<input bind:this={draftSchemaInput} type="hidden" name="schema" />
+	<input bind:this={draftSampleInput} type="hidden" name="sample_data" />
 </form>
 
 <div class="flex h-screen flex-col">
@@ -90,9 +106,42 @@
 			<div class="flex items-center gap-2">
 				<span class="font-medium">{data.template.name}</span>
 				<span class="text-muted-foreground text-sm">({data.template.slug})</span>
+				<Badge variant={hasDraft ? 'secondary' : 'default'}>
+					{draftStatus}
+				</Badge>
 			</div>
 		</div>
 		<div class="flex items-center gap-2">
+			{#if saveStatus === 'saved'}
+				<span class="text-sm text-green-600">Draft saved</span>
+			{:else if saveStatus === 'published'}
+				<span class="text-sm text-green-600">Published</span>
+			{:else if saveStatus === 'error'}
+				<span class="text-sm text-red-600">Error</span>
+			{/if}
+
+			<form
+				method="POST"
+				action="?/publish"
+				use:enhance={() => {
+					saveStatus = 'publishing';
+					return async ({ result, update }) => {
+						if (result.type === 'success') {
+							saveStatus = 'published';
+							setTimeout(() => { saveStatus = 'idle'; }, 2000);
+						} else {
+							saveStatus = 'error';
+						}
+						await update();
+					};
+				}}
+			>
+				<Button type="submit" variant="default" size="sm" disabled={saveStatus === 'publishing'}>
+					<Upload class="mr-1 h-4 w-4" />
+					Publish
+				</Button>
+			</form>
+
 			<Button variant="outline" size="sm" onclick={() => (settingsDialogOpen = true)}>
 				<Settings class="mr-1 h-4 w-4" />
 				Settings
@@ -117,10 +166,10 @@
 		</div>
 	{/if}
 
-	<!-- Editor -->
+	<!-- Editor (uses draft source if available) -->
 	<div class="flex-1 overflow-hidden">
 		<TemplateEditor
-			template={data.template}
+			template={editorTemplate}
 			onsave={handleSave}
 			onpreview={handlePreview}
 		/>

@@ -1,5 +1,6 @@
 import type { PageServerLoad, Actions } from './$types';
 import { getPageById, updatePage, updatePageContent, publishPage, unpublishPage, deletePage } from '$lib/server/pages';
+import { getTenantTemplates } from '$lib/server/templates/crud';
 import { error, fail, redirect } from '@sveltejs/kit';
 
 export const load: PageServerLoad = async ({ params, locals }) => {
@@ -17,8 +18,11 @@ export const load: PageServerLoad = async ({ params, locals }) => {
 		throw error(404, 'Page not found');
 	}
 
+	const templates = await getTenantTemplates(locals.tenant.id);
+
 	return {
 		page,
+		templates,
 		tenant: locals.tenant
 	};
 };
@@ -64,6 +68,25 @@ export const actions: Actions = {
 		});
 
 		return { success: true, message: 'Settings saved' };
+	},
+
+	saveBlocks: async ({ request, params, locals }) => {
+		if (!locals.tenant || locals.tenantLink?.role !== 'admin') {
+			return fail(403, { error: 'Not authorized' });
+		}
+
+		const formData = await request.formData();
+		const blocksJson = formData.get('blocks') as string;
+
+		try {
+			const blocks = blocksJson ? JSON.parse(blocksJson) : [];
+			await updatePage(params.id, {
+				blocks: JSON.stringify(blocks) as any
+			});
+			return { success: true, message: 'Blocks saved' };
+		} catch {
+			return fail(400, { error: 'Failed to save blocks' });
+		}
 	},
 
 	publish: async ({ params, locals }) => {

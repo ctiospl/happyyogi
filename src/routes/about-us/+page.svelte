@@ -26,7 +26,7 @@
 />
 
 {#if useStructured}
-	<PageRenderer content={data.structuredContent} />
+	<PageRenderer content={data.structuredContent} extraCss={data.extraCss} />
 {:else}
 
 <!-- Hero Section with Image -->

@@ -5,6 +5,7 @@
 import { db } from '$lib/server/db';
 import type { Template, NewTemplate, TemplateUpdate, TemplateSchema } from '$lib/server/db/schema';
 import { compileTemplate } from './compiler';
+import { parse } from 'svelte/compiler';
 
 // ============================================
 // READ
@@ -186,6 +187,54 @@ export async function updateTemplate(
 }
 
 // ============================================
+// DRAFT / PUBLISH
+// ============================================
+
+/**
+ * Save draft source code (does not affect published version)
+ */
+export async function saveDraft(id: string, draftSource: string): Promise<Template | null> {
+	const result = await db
+		.updateTable('templates')
+		.set({ draft_source_code: draftSource, updated_at: new Date() })
+		.where('id', '=', id)
+		.returningAll()
+		.executeTakeFirst();
+	return result ?? null;
+}
+
+/**
+ * Publish template: compile draft, copy to source_code, clear draft
+ */
+export async function publishTemplate(id: string): Promise<Template | null> {
+	const template = await getTemplateById(id);
+	if (!template) return null;
+
+	const sourceToPublish = template.draft_source_code || template.source_code;
+
+	const compiled = await compileTemplate(sourceToPublish, {
+		filename: `${template.slug}.svelte`,
+		name: template.name.replace(/[^a-zA-Z0-9]/g, '')
+	});
+
+	const result = await db
+		.updateTable('templates')
+		.set({
+			source_code: sourceToPublish,
+			draft_source_code: null,
+			compiled_js: compiled.success ? (compiled.js ?? null) : null,
+			compiled_css: compiled.success ? (compiled.css ?? null) : null,
+			compile_error: compiled.success ? null : (compiled.error ?? null),
+			updated_at: new Date()
+		})
+		.where('id', '=', id)
+		.returningAll()
+		.executeTakeFirst();
+
+	return result ?? null;
+}
+
+// ============================================
 // DELETE
 // ============================================
 
@@ -242,43 +291,299 @@ export async function compileTemplatePreview(
 	};
 }
 
-/**
- * Extract HTML markup from Svelte source, interpolating sample data
- */
-function extractHtmlMarkup(source: string, data: Record<string, unknown>): string {
-	// Remove script tags
-	let html = source.replace(/<script[^>]*>[\s\S]*?<\/script>/gi, '');
+// ============================================
+// AST-BASED PREVIEW RENDERER
+// ============================================
 
-	// Remove style tags (CSS handled separately)
-	html = html.replace(/<style[^>]*>[\s\S]*?<\/style>/gi, '');
+/* eslint-disable @typescript-eslint/no-explicit-any */
+type Scope = Record<string, unknown>;
 
-	// Simple interpolation: replace {variableName} with data values
-	html = html.replace(/\{([a-zA-Z_][a-zA-Z0-9_]*)\}/g, (_match, varName) => {
-		if (varName in data) {
-			const value = data[varName];
-			if (typeof value === 'string' || typeof value === 'number') {
-				return String(value);
+const VOID_ELEMENTS = new Set([
+	'area','base','br','col','embed','hr','img','input','link','meta','param','source','track','wbr'
+]);
+
+function escapeHtml(s: string): string {
+	return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+}
+
+/** Evaluate an ESTree expression node against a data scope */
+function evalExpr(node: any, scope: Scope): unknown {
+	if (!node) return undefined;
+	switch (node.type) {
+		case 'Identifier':
+			return scope[node.name];
+		case 'Literal':
+			return node.value;
+		case 'MemberExpression': {
+			const obj = evalExpr(node.object, scope) as any;
+			if (obj == null) return undefined;
+			if (node.computed) {
+				const prop = evalExpr(node.property, scope);
+				return obj[prop as string | number];
+			}
+			return obj[node.property.name];
+		}
+		case 'BinaryExpression': {
+			const l = evalExpr(node.left, scope);
+			const r = evalExpr(node.right, scope);
+			switch (node.operator) {
+				case '+': return (l as any) + (r as any);
+				case '-': return (l as any) - (r as any);
+				case '*': return (l as any) * (r as any);
+				case '/': return (l as any) / (r as any);
+				case '%': return (l as any) % (r as any);
+				case '===': return l === r;
+				case '!==': return l !== r;
+				case '==': return l == r;
+				case '!=': return l != r;
+				case '>': return (l as any) > (r as any);
+				case '<': return (l as any) < (r as any);
+				case '>=': return (l as any) >= (r as any);
+				case '<=': return (l as any) <= (r as any);
+				default: return undefined;
 			}
 		}
-		// Return placeholder for unresolved variables
-		return `[${varName}]`;
-	});
+		case 'LogicalExpression': {
+			const left = evalExpr(node.left, scope);
+			if (node.operator === '&&') return left ? evalExpr(node.right, scope) : left;
+			if (node.operator === '||') return left ? left : evalExpr(node.right, scope);
+			if (node.operator === '??') return left != null ? left : evalExpr(node.right, scope);
+			return undefined;
+		}
+		case 'ConditionalExpression': {
+			const test = evalExpr(node.test, scope);
+			return test ? evalExpr(node.consequent, scope) : evalExpr(node.alternate, scope);
+		}
+		case 'UnaryExpression': {
+			const arg = evalExpr(node.argument, scope);
+			if (node.operator === '!') return !arg;
+			if (node.operator === '-') return -(arg as number);
+			if (node.operator === '+') return +(arg as number);
+			if (node.operator === 'typeof') return typeof arg;
+			return undefined;
+		}
+		case 'TemplateLiteral': {
+			let result = '';
+			for (let i = 0; i < node.quasis.length; i++) {
+				result += node.quasis[i].value.cooked ?? node.quasis[i].value.raw;
+				if (i < node.expressions.length) {
+					const val = evalExpr(node.expressions[i], scope);
+					result += val != null ? String(val) : '';
+				}
+			}
+			return result;
+		}
+		case 'CallExpression': {
+			// Support simple method calls like arr.length, obj.method()
+			// For now, just return undefined for complex calls
+			return undefined;
+		}
+		case 'ArrayExpression': {
+			return node.elements.map((el: any) => evalExpr(el, scope));
+		}
+		case 'ObjectExpression': {
+			const obj: Record<string, unknown> = {};
+			for (const prop of node.properties) {
+				const key = prop.key.name ?? prop.key.value;
+				obj[key] = evalExpr(prop.value, scope);
+			}
+			return obj;
+		}
+		default:
+			return undefined;
+	}
+}
 
-	// Remove Svelte control flow blocks for preview (show content)
-	html = html.replace(/\{#if[^}]*\}/g, '');
-	html = html.replace(/\{:else[^}]*\}/g, '');
-	html = html.replace(/\{\/if\}/g, '');
-	html = html.replace(/\{#each[^}]*\}/g, '');
-	html = html.replace(/\{\/each\}/g, '');
-	html = html.replace(/\{@html[^}]*\}/g, '');
+/** Render attribute value (array of Text/ExpressionTag, or single ExpressionTag) */
+function renderAttrValue(value: any, scope: Scope): string {
+	if (value === true) return ''; // boolean attribute
+	if (!value) return '';
+	// Single ExpressionTag (not wrapped in array)
+	if (value.type === 'ExpressionTag') {
+		const val = evalExpr(value.expression, scope);
+		return val != null ? String(val) : '';
+	}
+	// Array of Text and ExpressionTag nodes
+	if (Array.isArray(value)) {
+		return value
+			.map((part: any) => {
+				if (part.type === 'Text') return part.data;
+				if (part.type === 'ExpressionTag') {
+					const val = evalExpr(part.expression, scope);
+					return val != null ? String(val) : '';
+				}
+				return '';
+			})
+			.join('');
+	}
+	return '';
+}
 
-	return html.trim();
+/** Destructure an EachBlock context pattern into scope bindings */
+function destructureContext(pattern: any, value: unknown, scope: Scope): Scope {
+	const child = { ...scope };
+	if (pattern.type === 'Identifier') {
+		child[pattern.name] = value;
+	} else if (pattern.type === 'ObjectPattern') {
+		const obj = value as Record<string, unknown>;
+		for (const prop of pattern.properties) {
+			child[prop.value?.name ?? prop.key.name] = obj?.[prop.key.name];
+		}
+	}
+	return child;
+}
+
+/** Walk AST fragment nodes and produce HTML */
+function renderNodes(nodes: any[], scope: Scope): string {
+	let out = '';
+	for (const node of nodes) {
+		out += renderNode(node, scope);
+	}
+	return out;
+}
+
+function renderNode(node: any, scope: Scope): string {
+	switch (node.type) {
+		case 'Text':
+			return node.data;
+
+		case 'Comment':
+			return '';
+
+		case 'ExpressionTag': {
+			const val = evalExpr(node.expression, scope);
+			if (val == null) return '';
+			return escapeHtml(String(val));
+		}
+
+		case 'HtmlTag': {
+			// {@html expr} — raw output, no escaping
+			const val = evalExpr(node.expression, scope);
+			return val != null ? String(val) : '';
+		}
+
+		case 'RegularElement':
+		case 'SvelteElement': {
+			const tag = node.name;
+			let attrs = '';
+			for (const attr of node.attributes ?? []) {
+				if (attr.type === 'Attribute') {
+					const val = renderAttrValue(attr.value, scope);
+					attrs += ` ${attr.name}="${escapeHtml(val)}"`;
+				} else if (attr.type === 'SpreadAttribute') {
+					// Skip spreads in preview
+				} else if (attr.type === 'ClassDirective') {
+					// class:name={expr} — skip, the base class attr handles most cases
+				} else if (attr.type === 'StyleDirective') {
+					// style:prop={expr} — skip for preview
+				}
+			}
+			if (VOID_ELEMENTS.has(tag)) {
+				return `<${tag}${attrs} />`;
+			}
+			const children = renderNodes(node.fragment?.nodes ?? [], scope);
+			return `<${tag}${attrs}>${children}</${tag}>`;
+		}
+
+		case 'IfBlock': {
+			const test = evalExpr(node.test, scope);
+			if (test) {
+				return renderNodes(node.consequent?.nodes ?? [], scope);
+			}
+			if (node.alternate) {
+				// alternate can be a Fragment or another IfBlock (elseif)
+				if (node.alternate.type === 'Fragment') {
+					return renderNodes(node.alternate.nodes ?? [], scope);
+				}
+				return renderNode(node.alternate, scope);
+			}
+			return '';
+		}
+
+		case 'EachBlock': {
+			const arr = evalExpr(node.expression, scope);
+			if (!Array.isArray(arr)) return '';
+			let out = '';
+			for (let i = 0; i < arr.length; i++) {
+				let childScope = destructureContext(node.context, arr[i], scope);
+				if (node.index) childScope[node.index] = i;
+				out += renderNodes(node.body?.nodes ?? [], childScope);
+			}
+			return out;
+		}
+
+		case 'Fragment':
+			return renderNodes(node.nodes ?? [], scope);
+
+		default:
+			// AwaitBlock, KeyBlock, etc. — skip for preview
+			return '';
+	}
+}
+
+/**
+ * Extract HTML markup from Svelte source using AST-based rendering.
+ * Parses template with svelte/compiler, walks the AST, and evaluates
+ * expressions against sample data for accurate preview output.
+ */
+function extractHtmlMarkup(source: string, data: Record<string, unknown>): string {
+	try {
+		const ast = parse(source, { modern: true });
+
+		// Build initial scope from script $props() + script-level const declarations
+		const scope: Scope = { ...data };
+
+		// Extract const declarations from script (e.g. iconMap)
+		const instance = (ast as any).instance;
+		if (instance) {
+			extractScriptConstants(instance, scope);
+		}
+
+		return renderNodes(ast.fragment?.nodes ?? [], scope).trim();
+	} catch {
+		// Fallback: strip tags naively if parse fails
+		return source
+			.replace(/<script[^>]*>[\s\S]*?<\/script>/gi, '')
+			.replace(/<style[^>]*>[\s\S]*?<\/style>/gi, '')
+			.trim();
+	}
+}
+
+/** Extract top-level const declarations from script AST into scope */
+function extractScriptConstants(jsNode: any, scope: Scope): void {
+	if (!jsNode?.content?.body) return;
+	for (const stmt of jsNode.content.body) {
+		if (stmt.type === 'VariableDeclaration' && stmt.kind === 'const') {
+			for (const decl of stmt.declarations) {
+				if (decl.id?.type === 'Identifier' && decl.init) {
+					// Only evaluate object literals (like iconMap)
+					const val = evalExpr(decl.init, scope);
+					if (val !== undefined) {
+						scope[decl.id.name] = val;
+					}
+				}
+			}
+		}
+	}
+}
+/* eslint-enable @typescript-eslint/no-explicit-any */
+
+/**
+ * Get multiple templates by IDs in a single query
+ */
+export async function getTemplatesByIds(ids: string[]): Promise<Template[]> {
+	if (ids.length === 0) return [];
+	return db
+		.selectFrom('templates')
+		.selectAll()
+		.where('id', 'in', ids)
+		.execute();
 }
 
 /**
  * Extract CSS from Svelte style block
  */
-function extractStyleBlock(source: string): string {
+export function extractStyleBlock(source: string): string {
 	const styleMatch = source.match(/<style[^>]*>([\s\S]*?)<\/style>/i);
 	return styleMatch ? styleMatch[1].trim() : '';
 }

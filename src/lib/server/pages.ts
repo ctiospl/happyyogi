@@ -189,10 +189,13 @@ export async function isSlugAvailable(
 // ============================================
 
 import type { PageContent } from '$lib/types';
+import type { PageBlock } from '$lib/server/db/schema';
+import { resolvePageBlocks } from '$lib/server/templates/resolve';
 
 export interface StructuredPageData {
 	useStructuredContent: true;
 	structuredContent: PageContent;
+	extraCss?: string;
 	seo: {
 		title: string;
 		description: string;
@@ -206,8 +209,24 @@ export interface FallbackPageData {
 export type PageLoadResult = StructuredPageData | FallbackPageData;
 
 /**
+ * Parse pages.blocks column (may be string or array)
+ */
+function parseBlocks(raw: unknown): PageBlock[] {
+	if (!raw) return [];
+	if (typeof raw === 'string') {
+		try {
+			const parsed = JSON.parse(raw);
+			return Array.isArray(parsed) ? parsed : [];
+		} catch {
+			return [];
+		}
+	}
+	return Array.isArray(raw) ? raw : [];
+}
+
+/**
  * Load page content for a route
- * Returns structured content from DB if available, otherwise signals fallback
+ * Fallback chain: pages.blocks → pages.content_json → hardcoded → 404
  */
 export async function loadPageForRoute(
 	tenantId: string | undefined,
@@ -219,29 +238,55 @@ export async function loadPageForRoute(
 
 	const page = await getPageBySlug(tenantId, slug);
 
-	if (!page || page.status !== 'published' || !page.content_json) {
+	if (!page || page.status !== 'published') {
 		return { useStructuredContent: false };
 	}
 
-	try {
-		const rawJson =
-			typeof page.content_json === 'string' ? JSON.parse(page.content_json) : page.content_json;
+	const seo = {
+		title: page.seo_title || page.title,
+		description: page.seo_description || ''
+	};
 
-		const contentJson = rawJson.structured ?? rawJson;
-
-		if (contentJson.version && Array.isArray(contentJson.blocks)) {
-			return {
-				useStructuredContent: true,
-				structuredContent: contentJson as PageContent,
-				seo: {
-					title: page.seo_title || page.title,
-					description: page.seo_description || ''
-				}
-			};
+	// 1. Try pages.blocks (template-backed blocks)
+	const blocks = parseBlocks(page.blocks);
+	if (blocks.length > 0) {
+		try {
+			const { content, extraCss } = await resolvePageBlocks(blocks);
+			if (content.blocks.length > 0) {
+				return {
+					useStructuredContent: true,
+					structuredContent: content,
+					extraCss: extraCss || undefined,
+					seo
+				};
+			}
+		} catch (err) {
+			console.warn(`Failed to resolve blocks for slug "${slug}":`, err);
 		}
-	} catch (err) {
-		console.warn(`Failed to parse page content for slug "${slug}":`, err);
 	}
 
+	// 2. Try pages.content_json (legacy structured content)
+	if (page.content_json) {
+		try {
+			const rawJson =
+				typeof page.content_json === 'string'
+					? JSON.parse(page.content_json)
+					: page.content_json;
+
+			const contentJson = rawJson.structured ?? rawJson;
+
+			if (contentJson.version && Array.isArray(contentJson.blocks)) {
+				return {
+					useStructuredContent: true,
+					structuredContent: contentJson as PageContent,
+					seo
+				};
+			}
+		} catch (err) {
+			console.warn(`Failed to parse page content for slug "${slug}":`, err);
+		}
+	}
+
+	// 3. Fall through to hardcoded content in route loader
 	return { useStructuredContent: false };
 }

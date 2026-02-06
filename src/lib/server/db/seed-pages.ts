@@ -1,12 +1,31 @@
 /**
- * Seed database with structured content from existing hardcoded pages
+ * Seed database with structured content from existing hardcoded pages.
+ * Populates both content_json (legacy) and blocks (template-backed PageBlock[]).
  */
 import { db } from './index';
-import type { PageContent, HeroBlock, ServicesGridBlock, AboutSnippetBlock, TestimonialCarouselBlock, CtaBannerBlock, InstructorGridBlock, ValuesGridBlock, StoryBlock } from '$lib/types';
+import type {
+	PageContent,
+	ContentBlock,
+	HeroBlock,
+	ServicesGridBlock,
+	AboutSnippetBlock,
+	TestimonialCarouselBlock,
+	CtaBannerBlock,
+	InstructorGridBlock,
+	ValuesGridBlock,
+	StoryBlock
+} from '$lib/types';
+import type { PageBlock } from '$lib/server/db/schema';
 import { homePage } from '$lib/content/pages/home';
 import { aboutPage } from '$lib/content/pages/about';
+import { seedCoreTemplates } from '$lib/server/templates/seed';
+import { getTenantTemplates } from '$lib/server/templates/crud';
+import { randomUUID } from 'crypto';
 
-// Map existing content structure to PageContent blocks
+// ============================================
+// CONTENT CONVERTERS (ContentBlock[] for content_json)
+// ============================================
+
 function convertHomePageToContent(): PageContent {
 	const blocks: PageContent['blocks'] = [];
 	let order = 0;
@@ -69,7 +88,7 @@ function convertHomePageToContent(): PageContent {
 		}
 	}
 
-	// Add instructor grid (hardcoded in the component currently)
+	// Add instructor grid
 	blocks.splice(3, 0, {
 		type: 'instructor-grid',
 		id: 'instructors',
@@ -77,26 +96,13 @@ function convertHomePageToContent(): PageContent {
 		heading: 'Meet Your Guides',
 		subheading: 'Experienced instructors dedicated to your yoga journey',
 		instructors: [
-			{
-				name: 'Deepa Rao',
-				image: '/images/instructors/deepa-rao.webp',
-				specialty: 'Hatha & Vinyasa'
-			},
-			{
-				name: 'Divya Rao',
-				image: '/images/instructors/divya-rao.webp',
-				specialty: 'Prenatal & Restorative'
-			},
-			{
-				name: 'Vijesh Nair',
-				image: '/images/instructors/vijesh-nair.webp',
-				specialty: 'Ashtanga & Inversions'
-			}
+			{ name: 'Deepa Rao', image: '/images/instructors/deepa-rao.webp', specialty: 'Hatha & Vinyasa' },
+			{ name: 'Divya Rao', image: '/images/instructors/divya-rao.webp', specialty: 'Prenatal & Restorative' },
+			{ name: 'Vijesh Nair', image: '/images/instructors/vijesh-nair.webp', specialty: 'Ashtanga & Inversions' }
 		],
 		cta: { text: 'Learn More About Us', href: '/about-us' }
 	} satisfies InstructorGridBlock);
 
-	// Reorder after splice
 	blocks.forEach((block, i) => {
 		block.order = i;
 	});
@@ -157,11 +163,68 @@ function convertAboutPageToContent(): PageContent {
 	return { version: 1, blocks };
 }
 
+// ============================================
+// CONTENT → PAGEBLOCK CONVERTER
+// ============================================
+
+/**
+ * Convert ContentBlock[] to PageBlock[] using template slug → ID mapping.
+ * Strips type/id/order from props (those are block-level, not prop-level).
+ */
+function contentBlocksToPageBlocks(
+	contentBlocks: ContentBlock[],
+	templateMap: Map<string, string>
+): PageBlock[] {
+	const pageBlocks: PageBlock[] = [];
+
+	for (const block of contentBlocks) {
+		const templateId = templateMap.get(block.type);
+		if (!templateId) {
+			console.warn(`No template found for block type "${block.type}", skipping`);
+			continue;
+		}
+
+		// eslint-disable-next-line @typescript-eslint/no-unused-vars
+		const { type, id, order, ...props } = block;
+
+		pageBlocks.push({
+			id: id || randomUUID(),
+			template_id: templateId,
+			props: props as Record<string, unknown>
+		});
+	}
+
+	return pageBlocks;
+}
+
+// ============================================
+// SEED FUNCTION
+// ============================================
+
+/**
+ * Get template slug → ID map. Seeds templates first if needed.
+ */
+async function getTemplateMap(tenantId: string): Promise<Map<string, string>> {
+	// Try existing templates first
+	const existing = await getTenantTemplates(tenantId);
+	if (existing.length > 0) {
+		return new Map(existing.map((t) => [t.slug, t.id]));
+	}
+
+	// Seed templates if none exist
+	const result = await seedCoreTemplates(tenantId);
+	return result.templateMap;
+}
+
 export async function seedPages(tenantId: string) {
+	const templateMap = await getTemplateMap(tenantId);
 	const homeContent = convertHomePageToContent();
 	const aboutContent = convertAboutPageToContent();
 
-	// Check if pages exist
+	// Convert to PageBlock[] format
+	const homeBlocks = contentBlocksToPageBlocks(homeContent.blocks, templateMap);
+	const aboutBlocks = contentBlocksToPageBlocks(aboutContent.blocks, templateMap);
+
 	const existingHome = await db
 		.selectFrom('pages')
 		.select('id')
@@ -188,6 +251,7 @@ export async function seedPages(tenantId: string) {
 				slug: 'home',
 				title: homePage.title,
 				content_json: JSON.stringify(homeContent),
+				blocks: JSON.stringify(homeBlocks) as any,
 				seo_title: homePage.seo.title,
 				seo_description: homePage.seo.description,
 				status: 'published',
@@ -195,9 +259,15 @@ export async function seedPages(tenantId: string) {
 				updated_at: now
 			})
 			.execute();
-		console.log('Seeded home page');
+		console.log(`Seeded home page (${homeBlocks.length} blocks)`);
 	} else {
-		console.log('Home page already exists, skipping');
+		// Update existing page to add blocks if empty
+		await db
+			.updateTable('pages')
+			.set({ blocks: JSON.stringify(homeBlocks) as any, updated_at: now })
+			.where('id', '=', existingHome.id)
+			.execute();
+		console.log(`Updated home page blocks (${homeBlocks.length} blocks)`);
 	}
 
 	if (!existingAbout) {
@@ -208,6 +278,7 @@ export async function seedPages(tenantId: string) {
 				slug: 'about-us',
 				title: aboutPage.title,
 				content_json: JSON.stringify(aboutContent),
+				blocks: JSON.stringify(aboutBlocks) as any,
 				seo_title: aboutPage.seo.title,
 				seo_description: aboutPage.seo.description,
 				status: 'published',
@@ -215,26 +286,13 @@ export async function seedPages(tenantId: string) {
 				updated_at: now
 			})
 			.execute();
-		console.log('Seeded about page');
+		console.log(`Seeded about page (${aboutBlocks.length} blocks)`);
 	} else {
-		console.log('About page already exists, skipping');
+		await db
+			.updateTable('pages')
+			.set({ blocks: JSON.stringify(aboutBlocks) as any, updated_at: now })
+			.where('id', '=', existingAbout.id)
+			.execute();
+		console.log(`Updated about page blocks (${aboutBlocks.length} blocks)`);
 	}
-}
-
-// CLI runner
-if (import.meta.url === `file://${process.argv[1]}`) {
-	const tenantId = process.argv[2];
-	if (!tenantId) {
-		console.error('Usage: npx tsx src/lib/server/db/seed-pages.ts <tenant_id>');
-		process.exit(1);
-	}
-	seedPages(tenantId)
-		.then(() => {
-			console.log('Done seeding pages');
-			process.exit(0);
-		})
-		.catch((err) => {
-			console.error('Error seeding pages:', err);
-			process.exit(1);
-		});
 }

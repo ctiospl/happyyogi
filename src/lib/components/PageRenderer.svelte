@@ -15,15 +15,20 @@
 	interface Props {
 		content: PageContent;
 		instructors?: InstructorItem[];
+		extraCss?: string;
 	}
 
-	let { content, instructors = [] }: Props = $props();
+	let { content, instructors = [], extraCss }: Props = $props();
 
 	// Sort blocks by order if present
 	const sortedBlocks = $derived(
 		[...content.blocks].sort((a, b) => (a.order ?? 0) - (b.order ?? 0))
 	);
 </script>
+
+{#if extraCss}
+	{@html `<style>${extraCss}</style>`}
+{/if}
 
 {#each sortedBlocks as block, index (block.id ?? `block-${index}`)}
 	{#if block.type === 'hero'}
