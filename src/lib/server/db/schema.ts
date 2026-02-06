@@ -14,6 +14,8 @@ export type PaymentStatus = 'pending' | 'completed' | 'failed' | 'refunded';
 export type PaymentType = 'full' | 'deposit' | 'balance';
 export type PaymentMethod = 'upi' | 'cash' | 'card' | 'bank_transfer' | 'gateway';
 export type PageStatus = 'draft' | 'published';
+export type LayoutStatus = 'draft' | 'published';
+export type LayoutRegionName = 'header' | 'footer' | 'announcement_bar' | 'sidebar';
 export type ContactStatus = 'new' | 'read' | 'replied' | 'archived';
 export type OtpPurpose = 'login' | 'signup' | 'verify_phone';
 export type AuthMethod = 'phone_otp' | 'email_otp' | 'password';
@@ -365,6 +367,28 @@ export type NewTemplate = Insertable<TemplatesTable>;
 export type TemplateUpdate = Updateable<TemplatesTable>;
 
 // ============================================
+// LAYOUTS
+// ============================================
+export type LayoutRegions = Partial<Record<LayoutRegionName, PageBlock[]>>;
+
+export interface LayoutsTable {
+	id: Generated<string>;
+	tenant_id: string;
+	name: string;
+	slug: string;
+	is_default: Generated<boolean>;
+	regions: Generated<Json<LayoutRegions>>;
+	status: LayoutStatus;
+	published_at: Timestamp | null;
+	created_at: Generated<Timestamp>;
+	updated_at: Timestamp;
+}
+
+export type Layout = Selectable<LayoutsTable>;
+export type NewLayout = Insertable<LayoutsTable>;
+export type LayoutUpdate = Updateable<LayoutsTable>;
+
+// ============================================
 // PAGES
 // ============================================
 export interface PageBlock {
@@ -383,6 +407,8 @@ export interface PagesTable {
 	template: string | null;
 	template_id: string | null; // reference to templates table
 	blocks: Generated<Json<PageBlock[]>>; // structured content blocks (defaults to [])
+	layout_id: string | null;
+	no_layout: Generated<boolean>;
 	seo_title: string | null;
 	seo_description: string | null;
 	og_image_url: string | null;
@@ -484,6 +510,7 @@ export interface Database {
 	waitlists: WaitlistsTable;
 	payments: PaymentsTable;
 	templates: TemplatesTable;
+	layouts: LayoutsTable;
 	pages: PagesTable;
 	media: MediaTable;
 	contact_submissions: ContactSubmissionsTable;

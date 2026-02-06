@@ -12,9 +12,10 @@
 		blocks: PageBlock[];
 		templates: Template[];
 		onchange: (blocks: PageBlock[]) => void;
+		categoryFilter?: string;
 	}
 
-	let { blocks, templates, onchange }: Props = $props();
+	let { blocks, templates, onchange, categoryFilter = 'section' }: Props = $props();
 
 	let addDialogOpen = $state(false);
 	let expandedBlock = $state<string | null>(null);
@@ -71,9 +72,9 @@
 		onchange(updated);
 	}
 
-	// Filter to section templates only
+	// Filter templates by category
 	const sectionTemplates = $derived(
-		templates.filter(t => t.category === 'section')
+		templates.filter(t => t.category === categoryFilter)
 	);
 </script>
 

@@ -1,6 +1,7 @@
 import type { PageServerLoad, Actions } from './$types';
 import { getPageById, updatePage, publishPage, unpublishPage, deletePage } from '$lib/server/pages';
 import { getTenantTemplates } from '$lib/server/templates/crud';
+import { getLayouts } from '$lib/server/layouts';
 import { error, fail, redirect } from '@sveltejs/kit';
 
 export const load: PageServerLoad = async ({ params, locals }) => {
@@ -18,11 +19,15 @@ export const load: PageServerLoad = async ({ params, locals }) => {
 		throw error(404, 'Page not found');
 	}
 
-	const templates = await getTenantTemplates(locals.tenant.id);
+	const [templates, layouts] = await Promise.all([
+		getTenantTemplates(locals.tenant.id),
+		getLayouts(locals.tenant.id)
+	]);
 
 	return {
 		page,
 		templates,
+		layouts,
 		tenant: locals.tenant
 	};
 };
@@ -38,12 +43,16 @@ export const actions: Actions = {
 		const slug = formData.get('slug') as string;
 		const seo_title = formData.get('seo_title') as string;
 		const seo_description = formData.get('seo_description') as string;
+		const layout_id = formData.get('layout_id') as string;
+		const no_layout = formData.get('no_layout') === 'true';
 
 		await updatePage(params.id, {
 			title,
 			slug: slug?.toLowerCase().replace(/[^a-z0-9-]/g, '-'),
 			seo_title: seo_title || null,
-			seo_description: seo_description || null
+			seo_description: seo_description || null,
+			layout_id: layout_id || null,
+			no_layout
 		});
 
 		return { success: true, message: 'Settings saved' };

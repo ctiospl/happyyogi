@@ -652,6 +652,314 @@ const templateDefinitions: TemplateDefinition[] = [
 ];
 
 // ============================================
+// LAYOUT TEMPLATE SCHEMAS
+// ============================================
+
+const siteHeaderSchema: TemplateSchema = {
+	fields: [
+		{ key: 'logo_url', type: 'image', label: 'Logo Image', required: true },
+		{ key: 'brand_name', type: 'text', label: 'Brand Name' },
+		{
+			key: 'nav_links',
+			type: 'array',
+			label: 'Navigation Links',
+			itemType: 'object',
+			fields: [
+				{ key: 'label', type: 'text', label: 'Label', required: true },
+				{ key: 'href', type: 'text', label: 'Link', required: true }
+			]
+		},
+		{
+			key: 'cta',
+			type: 'object',
+			label: 'CTA Button',
+			fields: [
+				{ key: 'text', type: 'text', label: 'Button Text', required: true },
+				{ key: 'href', type: 'text', label: 'Button Link', required: true }
+			]
+		}
+	]
+};
+
+const siteFooterSchema: TemplateSchema = {
+	fields: [
+		{ key: 'brand_name', type: 'text', label: 'Brand Name', required: true },
+		{ key: 'tagline', type: 'textarea', label: 'Tagline' },
+		{
+			key: 'quick_links',
+			type: 'array',
+			label: 'Quick Links',
+			itemType: 'object',
+			fields: [
+				{ key: 'label', type: 'text', label: 'Label', required: true },
+				{ key: 'href', type: 'text', label: 'Link', required: true }
+			]
+		},
+		{
+			key: 'contact',
+			type: 'object',
+			label: 'Contact Info',
+			fields: [
+				{ key: 'phone', type: 'text', label: 'Phone' },
+				{ key: 'email', type: 'text', label: 'Email' },
+				{ key: 'instagram', type: 'text', label: 'Instagram Handle' }
+			]
+		},
+		{ key: 'copyright_text', type: 'text', label: 'Copyright Text' }
+	]
+};
+
+const announcementBarSchema: TemplateSchema = {
+	fields: [
+		{ key: 'message', type: 'text', label: 'Message', required: true },
+		{
+			key: 'link',
+			type: 'object',
+			label: 'Link',
+			fields: [
+				{ key: 'text', type: 'text', label: 'Link Text' },
+				{ key: 'href', type: 'text', label: 'Link URL' }
+			]
+		},
+		{ key: 'bg_color', type: 'text', label: 'Background Color', placeholder: '#7c3545' },
+		{ key: 'dismissible', type: 'boolean', label: 'Dismissible' }
+	]
+};
+
+const sidebarWidgetSchema: TemplateSchema = {
+	fields: [
+		{ key: 'title', type: 'text', label: 'Title', required: true },
+		{ key: 'content', type: 'richtext', label: 'Content' },
+		{
+			key: 'cta',
+			type: 'object',
+			label: 'CTA',
+			fields: ctaFields
+		},
+		{
+			key: 'style',
+			type: 'select',
+			label: 'Style',
+			options: [
+				{ value: 'card', label: 'Card' },
+				{ value: 'minimal', label: 'Minimal' }
+			]
+		}
+	]
+};
+
+// ============================================
+// LAYOUT TEMPLATE SOURCE CODE
+// ============================================
+
+const siteHeaderSource = `<script>
+  let { logo_url, brand_name, nav_links = [], cta } = $props();
+</script>
+
+<header class="sticky top-0 z-50 w-full border-b border-border bg-background/80 backdrop-blur-md">
+  <div class="mx-auto flex h-20 max-w-7xl items-center justify-between px-4 sm:px-6 lg:px-8">
+    <a href="/" class="flex items-center">
+      {#if logo_url}
+        <img src={logo_url} alt={brand_name || ''} class="h-14 w-auto object-contain sm:h-16" />
+      {:else if brand_name}
+        <span class="font-display text-xl font-semibold text-foreground">{brand_name}</span>
+      {/if}
+    </a>
+
+    <nav aria-label="Primary navigation" class="hidden items-center gap-8 md:flex">
+      {#each nav_links as link}
+        <a href={link.href} class="text-sm font-medium text-foreground transition-colors hover:text-primary">
+          {link.label}
+        </a>
+      {/each}
+    </nav>
+
+    {#if cta}
+      <div class="hidden md:block">
+        <a href={cta.href} class="inline-flex h-10 items-center justify-center rounded-md bg-accent px-6 text-sm font-medium text-accent-foreground transition-colors hover:bg-accent/90">
+          {cta.text}
+        </a>
+      </div>
+    {/if}
+  </div>
+</header>`;
+
+const siteFooterSource = `<script>
+  let { brand_name, tagline, quick_links = [], contact = {}, copyright_text } = $props();
+</script>
+
+<footer class="bg-brand-burgundy py-12">
+  <div class="container mx-auto px-6">
+    <div class="grid grid-cols-1 gap-8 md:grid-cols-3">
+      <div class="space-y-4">
+        <h3 class="font-display text-2xl font-semibold text-secondary-foreground">{brand_name}</h3>
+        {#if tagline}
+          <p class="text-secondary-foreground/80 max-w-xs text-sm leading-relaxed">{tagline}</p>
+        {/if}
+      </div>
+
+      {#if quick_links.length > 0}
+        <div class="space-y-4">
+          <h4 class="font-display text-lg font-semibold text-secondary-foreground">Quick Links</h4>
+          <nav aria-label="Footer navigation" class="flex flex-col space-y-2">
+            {#each quick_links as link}
+              <a href={link.href} class="text-secondary-foreground/80 hover:text-accent text-sm transition-colors duration-200">
+                {link.label}
+              </a>
+            {/each}
+          </nav>
+        </div>
+      {/if}
+
+      <div class="space-y-4">
+        <h4 class="font-display text-lg font-semibold text-secondary-foreground">Contact Us</h4>
+        <div class="space-y-3">
+          {#if contact.phone}
+            <a href="tel:{contact.phone.replace(/\\s/g, '')}" class="text-secondary-foreground/80 hover:text-accent flex items-center gap-3 text-sm transition-colors duration-200">
+              <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72c.127.96.361 1.903.7 2.81a2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45c.907.339 1.85.573 2.81.7A2 2 0 0 1 22 16.92z"/></svg>
+              {contact.phone}
+            </a>
+          {/if}
+          {#if contact.email}
+            <a href="mailto:{contact.email}" class="text-secondary-foreground/80 hover:text-accent flex items-center gap-3 text-sm transition-colors duration-200">
+              <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="20" height="16" x="2" y="4" rx="2"/><path d="m22 7-8.97 5.7a1.94 1.94 0 0 1-2.06 0L2 7"/></svg>
+              {contact.email}
+            </a>
+          {/if}
+          {#if contact.instagram}
+            <a href="https://instagram.com/{contact.instagram.replace('@', '')}" target="_blank" rel="noopener noreferrer" class="text-secondary-foreground/80 hover:text-accent flex items-center gap-3 text-sm transition-colors duration-200">
+              <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="20" height="20" x="2" y="2" rx="5" ry="5"/><path d="M16 11.37A4 4 0 1 1 12.63 8 4 4 0 0 1 16 11.37z"/><line x1="17.5" x2="17.51" y1="6.5" y2="6.5"/></svg>
+              {contact.instagram}
+            </a>
+          {/if}
+        </div>
+      </div>
+    </div>
+
+    <div class="border-secondary-foreground/20 mt-10 border-t pt-6 text-center">
+      <p class="text-secondary-foreground/60 text-sm">{copyright_text || \`© \${new Date().getFullYear()} \${brand_name}. All rights reserved.\`}</p>
+    </div>
+  </div>
+</footer>`;
+
+const announcementBarSource = `<script>
+  let { message, link, bg_color = '#7c3545', dismissible = false } = $props();
+  let dismissed = $state(false);
+</script>
+
+{#if !dismissed}
+  <div class="relative px-4 py-2.5 text-center text-sm text-white" style="background-color: {bg_color}">
+    <span>{message}</span>
+    {#if link?.text && link?.href}
+      <a href={link.href} class="ml-2 font-medium underline hover:no-underline">{link.text}</a>
+    {/if}
+    {#if dismissible}
+      <button onclick={() => dismissed = true} class="absolute right-3 top-1/2 -translate-y-1/2 text-white/80 hover:text-white" aria-label="Dismiss">
+        <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg>
+      </button>
+    {/if}
+  </div>
+{/if}`;
+
+const sidebarWidgetSource = `<script>
+  let { title, content, cta, style = 'card' } = $props();
+</script>
+
+<aside class="{style === 'card' ? 'rounded-lg border bg-card p-6 shadow-sm' : 'py-4'}">
+  <h3 class="mb-3 text-lg font-semibold text-foreground">{title}</h3>
+  {#if content}
+    <div class="prose prose-sm text-muted-foreground">
+      {@html content}
+    </div>
+  {/if}
+  {#if cta?.text && cta?.href}
+    <a href={cta.href} class="mt-4 inline-flex items-center text-sm font-medium text-primary hover:underline">
+      {cta.text} →
+    </a>
+  {/if}
+</aside>`;
+
+// Layout template definitions
+const layoutTemplateDefinitions: TemplateDefinition[] = [
+	{
+		slug: 'site-header',
+		name: 'Site Header',
+		description: 'Responsive header with logo, navigation links, and CTA button',
+		schema: siteHeaderSchema,
+		source_code: siteHeaderSource,
+		sample_data_key: 'hero' // not used, see layoutSampleData below
+	},
+	{
+		slug: 'site-footer',
+		name: 'Site Footer',
+		description: '3-column footer with brand info, quick links, and contact details',
+		schema: siteFooterSchema,
+		source_code: siteFooterSource,
+		sample_data_key: 'hero'
+	},
+	{
+		slug: 'announcement-bar',
+		name: 'Announcement Bar',
+		description: 'Top-of-page announcement banner with optional link and dismiss',
+		schema: announcementBarSchema,
+		source_code: announcementBarSource,
+		sample_data_key: 'hero'
+	},
+	{
+		slug: 'sidebar-widget',
+		name: 'Sidebar Widget',
+		description: 'Content widget for sidebar with optional CTA',
+		schema: sidebarWidgetSchema,
+		source_code: sidebarWidgetSource,
+		sample_data_key: 'hero'
+	}
+];
+
+const layoutSampleData: Record<string, Record<string, unknown>> = {
+	'site-header': {
+		logo_url: '/images/logo-full.jpg',
+		brand_name: 'The Happy Yogi Co.',
+		nav_links: [
+			{ label: 'About Us', href: '/about-us' },
+			{ label: 'Services', href: '/services' },
+			{ label: 'Success Stories', href: '/success-stories' },
+			{ label: 'Contact', href: '/contact' }
+		],
+		cta: { text: 'Upcoming Workshops', href: '/workshops' }
+	},
+	'site-footer': {
+		brand_name: 'The Happy Yogi Co.',
+		tagline: 'Where wellness meets joy. Transform your life through the ancient practice of yoga.',
+		quick_links: [
+			{ label: 'About Us', href: '/about-us' },
+			{ label: 'Services', href: '/services' },
+			{ label: 'Success Stories', href: '/success-stories' },
+			{ label: 'Contact', href: '/contact' },
+			{ label: 'Privacy', href: '/privacy' },
+			{ label: 'Terms', href: '/terms' }
+		],
+		contact: {
+			phone: '+91 98200 09173',
+			email: 'info@thehappyyogico.com',
+			instagram: '@theshaala'
+		},
+		copyright_text: '© 2026 The Happy Yogi Co. All rights reserved.'
+	},
+	'announcement-bar': {
+		message: 'New workshop starting soon!',
+		link: { text: 'Register Now', href: '/workshops' },
+		bg_color: '#7c3545',
+		dismissible: true
+	},
+	'sidebar-widget': {
+		title: 'About Us',
+		content: '<p>We are a yoga studio dedicated to wellness and joy.</p>',
+		cta: { text: 'Learn More', href: '/about-us' },
+		style: 'card'
+	}
+};
+
+// ============================================
 // SEED FUNCTION
 // ============================================
 
@@ -753,4 +1061,87 @@ export async function hasCoreTemplates(tenantId: string): Promise<boolean> {
 
 	// Check if ALL core templates exist
 	return CORE_TEMPLATE_SLUGS.every((slug) => existingSlugs.has(slug));
+}
+
+// ============================================
+// LAYOUT TEMPLATE SEEDING
+// ============================================
+
+/**
+ * Seed layout templates (category='layout') for a tenant
+ */
+export async function seedLayoutTemplates(tenantId: string): Promise<SeedResult> {
+	const result: SeedResult = {
+		created: [],
+		updated: [],
+		skipped: [],
+		errors: [],
+		templateMap: new Map()
+	};
+
+	const existing = await getTenantTemplates(tenantId);
+	const existingBySlug = new Map(existing.map((t) => [t.slug, t]));
+
+	for (const def of layoutTemplateDefinitions) {
+		const newSampleData = layoutSampleData[def.slug] ?? {};
+		const existingTemplate = existingBySlug.get(def.slug);
+
+		if (existingTemplate) {
+			result.templateMap.set(def.slug, existingTemplate.id);
+
+			const existingSample = existingTemplate.sample_data as Record<string, unknown> | null;
+			const sampleChanged = JSON.stringify(existingSample) !== JSON.stringify(newSampleData);
+			const sourceChanged = existingTemplate.source_code !== def.source_code;
+
+			if (sampleChanged || sourceChanged) {
+				try {
+					await updateTemplate(existingTemplate.id, {
+						...(sampleChanged ? { sample_data: newSampleData } : {}),
+						...(sourceChanged ? { source_code: def.source_code } : {})
+					});
+					result.updated.push(def.slug);
+				} catch (err) {
+					result.errors.push({
+						slug: def.slug,
+						error: err instanceof Error ? err.message : String(err)
+					});
+				}
+			} else {
+				result.skipped.push(def.slug);
+			}
+			continue;
+		}
+
+		try {
+			const created = await createTemplate({
+				tenant_id: tenantId,
+				slug: def.slug,
+				name: def.name,
+				description: def.description,
+				category: 'layout',
+				source_code: def.source_code,
+				schema: def.schema,
+				sample_data: newSampleData,
+				updated_at: new Date()
+			});
+			result.created.push(def.slug);
+			result.templateMap.set(def.slug, created.id);
+		} catch (err) {
+			result.errors.push({
+				slug: def.slug,
+				error: err instanceof Error ? err.message : String(err)
+			});
+		}
+	}
+
+	return result;
+}
+
+/**
+ * Check if all layout templates exist for a tenant
+ */
+export async function hasLayoutTemplates(tenantId: string): Promise<boolean> {
+	const templates = await getTenantTemplates(tenantId);
+	const existingSlugs = new Set(templates.map((t) => t.slug));
+	return layoutTemplateDefinitions.every((d) => existingSlugs.has(d.slug));
 }

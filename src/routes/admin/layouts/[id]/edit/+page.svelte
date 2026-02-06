@@ -1,12 +1,11 @@
 <script lang="ts">
 	import type { PageData, ActionData } from './$types';
+	import type { PageBlock, LayoutRegionName } from '$lib/server/db/schema';
 	import { enhance } from '$app/forms';
-	import type { PageBlock } from '$lib/server/db/schema';
-	import PageBlockEditor from '$lib/components/admin/PageBlockEditor.svelte';
+	import LayoutRegionEditor from '$lib/components/admin/LayoutRegionEditor.svelte';
 	import { Button } from '$lib/components/ui/button';
 	import { Input } from '$lib/components/ui/input';
 	import { Label } from '$lib/components/ui/label';
-	import { Textarea } from '$lib/components/ui/textarea';
 	import { Badge } from '$lib/components/ui/badge';
 	import * as Sheet from '$lib/components/ui/sheet';
 	import * as Alert from '$lib/components/ui/alert';
@@ -28,25 +27,21 @@
 	let settingsOpen = $state(false);
 	let saveStatus = $state<'idle' | 'saving' | 'saved' | 'error'>('idle');
 
-	let title = $state(data.page.title);
-	let slug = $state(data.page.slug);
-	let seoTitle = $state(data.page.seo_title || '');
-	let seoDescription = $state(data.page.seo_description || '');
-	let layoutId = $state(data.page.layout_id || '');
-	let noLayout = $state(data.page.no_layout ?? false);
+	let name = $state(data.layout.name);
+	let slug = $state(data.layout.slug);
 
-	let pageBlocks = $state<PageBlock[]>(parseBlocks(data.page.blocks));
-
-	function parseBlocks(raw: unknown): PageBlock[] {
-		if (!raw) return [];
+	function parseRegions(raw: unknown): Partial<Record<LayoutRegionName, PageBlock[]>> {
+		if (!raw) return {};
 		if (typeof raw === 'string') {
-			try { return JSON.parse(raw); } catch { return []; }
+			try { return JSON.parse(raw); } catch { return {}; }
 		}
-		return Array.isArray(raw) ? raw : [];
+		return (raw as Partial<Record<LayoutRegionName, PageBlock[]>>) ?? {};
 	}
 
-	let blocksForm: HTMLFormElement;
-	let blocksInput: HTMLInputElement;
+	let regions = $state(parseRegions(data.layout.regions));
+
+	let regionsForm: HTMLFormElement;
+	let regionsInput: HTMLInputElement;
 
 	// Preview state
 	let previewOpen = $state(true);
@@ -65,7 +60,6 @@
 		mobile: '375px'
 	};
 
-	// Resizable divider
 	function onDividerDown(e: MouseEvent) {
 		e.preventDefault();
 		isDragging = true;
@@ -74,7 +68,6 @@
 			if (!containerRef) return;
 			const rect = containerRef.getBoundingClientRect();
 			let ratio = (e.clientX - rect.left) / rect.width;
-			// Enforce min widths (~300px each side)
 			const minRatio = 300 / rect.width;
 			const maxRatio = 1 - minRatio;
 			ratio = Math.max(minRatio, Math.min(maxRatio, ratio));
@@ -91,36 +84,35 @@
 		window.addEventListener('mouseup', onUp);
 	}
 
-	// Debounced preview sync
 	function syncPreview() {
 		clearTimeout(debounceTimer);
 		debounceTimer = setTimeout(async () => {
 			if (!previewOpen || !iframeRef) return;
 			try {
-				const res = await fetch(`/api/pages/${data.page.id}/preview`, {
+				const res = await fetch(`/api/layouts/${data.layout.id}/preview`, {
 					method: 'POST',
 					headers: { 'Content-Type': 'application/json' },
-					body: JSON.stringify({ blocks: pageBlocks })
+					body: JSON.stringify({ regions })
 				});
 				if (!res.ok) return;
-				const { content, extraCss } = await res.json();
-				iframeRef.contentWindow?.postMessage({ type: 'preview-update', content, extraCss }, '*');
+				const resolved = await res.json();
+				iframeRef.contentWindow?.postMessage({ type: 'layout-preview-update', layout: resolved }, '*');
 			} catch {
-				// silently ignore preview errors
+				// silently ignore
 			}
 		}, 400);
 	}
 
-	function handleBlocksChange(blocks: PageBlock[]) {
-		pageBlocks = blocks;
+	function handleRegionsChange(newRegions: Partial<Record<LayoutRegionName, PageBlock[]>>) {
+		regions = newRegions;
 		syncPreview();
 	}
 
-	function saveBlocks() {
-		if (!blocksForm || !blocksInput) return;
-		blocksInput.value = JSON.stringify(pageBlocks);
+	function saveRegions() {
+		if (!regionsForm || !regionsInput) return;
+		regionsInput.value = JSON.stringify(regions);
 		saveStatus = 'saving';
-		blocksForm.requestSubmit();
+		regionsForm.requestSubmit();
 	}
 
 	onMount(() => {
@@ -129,14 +121,14 @@
 </script>
 
 <svelte:head>
-	<title>Edit: {data.page.title} | Admin</title>
+	<title>Edit: {data.layout.name} | Layouts | Admin</title>
 </svelte:head>
 
-<!-- Hidden form for block saves -->
+<!-- Hidden form for region saves -->
 <form
-	bind:this={blocksForm}
+	bind:this={regionsForm}
 	method="POST"
-	action="?/saveBlocks"
+	action="?/saveRegions"
 	use:enhance={() => {
 		return async ({ result, update }) => {
 			if (result.type === 'success') {
@@ -150,19 +142,19 @@
 	}}
 	class="hidden"
 >
-	<input bind:this={blocksInput} type="hidden" name="blocks" />
+	<input bind:this={regionsInput} type="hidden" name="regions" />
 </form>
 
 <div class="flex h-screen flex-col">
 	<!-- Top bar -->
 	<div class="bg-background flex items-center justify-between border-b px-4 py-2">
 		<div class="flex items-center gap-4">
-			<Button href="/admin/pages" variant="ghost" size="icon">
+			<Button href="/admin/layouts" variant="ghost" size="icon">
 				<ArrowLeft class="h-4 w-4" />
 			</Button>
 			<div>
-				<h1 class="font-semibold">{data.page.title}</h1>
-				<p class="text-muted-foreground text-sm">/{data.page.slug}</p>
+				<h1 class="font-semibold">{data.layout.name}</h1>
+				<p class="text-muted-foreground text-sm">{data.layout.slug}</p>
 			</div>
 		</div>
 
@@ -175,31 +167,27 @@
 			{:else if saveStatus === 'error'}
 				<span class="flex items-center gap-1 text-sm text-red-600">
 					<AlertCircle class="h-4 w-4" />
-					Error saving
+					Error
 				</span>
 			{/if}
 
-			<Badge variant={data.page.status === 'published' ? 'default' : 'secondary'}>
-				{data.page.status}
+			<Badge variant={data.layout.status === 'published' ? 'default' : 'secondary'}>
+				{data.layout.status}
 			</Badge>
 
-			<Button variant="default" size="sm" onclick={saveBlocks}>
-				Save
-			</Button>
+			<Button variant="default" size="sm" onclick={saveRegions}>Save</Button>
 
 			<Button
 				variant="outline"
 				size="sm"
 				onclick={() => (previewOpen = !previewOpen)}
-				title={previewOpen ? 'Hide preview' : 'Show preview'}
 			>
 				{#if previewOpen}
 					<EyeOff class="mr-1 h-4 w-4" />
-					Preview
 				{:else}
 					<Eye class="mr-1 h-4 w-4" />
-					Preview
 				{/if}
+				Preview
 			</Button>
 
 			<Sheet.Root bind:open={settingsOpen}>
@@ -213,64 +201,25 @@
 				</Sheet.Trigger>
 				<Sheet.Content>
 					<Sheet.Header>
-						<Sheet.Title>Page Settings</Sheet.Title>
+						<Sheet.Title>Layout Settings</Sheet.Title>
 					</Sheet.Header>
 					<form method="POST" action="?/updateMeta" use:enhance class="mt-6 space-y-4">
 						<div>
-							<Label for="title">Page Title</Label>
-							<Input id="title" name="title" bind:value={title} />
+							<Label for="name">Layout Name</Label>
+							<Input id="name" name="name" bind:value={name} />
 						</div>
 						<div>
-							<Label for="slug">URL Slug</Label>
+							<Label for="slug">Slug</Label>
 							<Input id="slug" name="slug" bind:value={slug} />
 						</div>
-						<div>
-							<Label for="seo_title">SEO Title</Label>
-							<Input id="seo_title" name="seo_title" bind:value={seoTitle} />
-						</div>
-						<div>
-							<Label for="seo_description">SEO Description</Label>
-							<Textarea id="seo_description" name="seo_description" bind:value={seoDescription} />
-						</div>
-
-						<div class="border-t pt-4">
-							<h4 class="mb-3 text-sm font-medium">Layout Override</h4>
-							<div class="space-y-3">
-								<div>
-									<Label for="layout_id">Layout</Label>
-									<select
-										id="layout_id"
-										name="layout_id"
-										bind:value={layoutId}
-										class="border-input bg-background ring-offset-background flex h-10 w-full rounded-md border px-3 py-2 text-sm"
-										disabled={noLayout}
-									>
-										<option value="">Default (tenant layout)</option>
-										{#each data.layouts as layout}
-											<option value={layout.id}>{layout.name}</option>
-										{/each}
-									</select>
-								</div>
-								<label class="flex items-center gap-2 text-sm">
-									<input
-										type="checkbox"
-										bind:checked={noLayout}
-										class="rounded"
-									/>
-									No Layout (render without header/footer)
-								</label>
-								<input type="hidden" name="no_layout" value={noLayout ? 'true' : 'false'} />
-							</div>
-						</div>
-
 						<Button type="submit" class="w-full">Save Settings</Button>
 					</form>
 
 					<div class="mt-8 border-t pt-6">
 						<h3 class="mb-4 font-medium">Publish</h3>
-						{#if data.page.status === 'draft'}
+						{#if data.layout.status === 'draft'}
 							<form method="POST" action="?/publish" use:enhance>
-								<Button type="submit" class="w-full">Publish Page</Button>
+								<Button type="submit" class="w-full">Publish Layout</Button>
 							</form>
 						{:else}
 							<form method="POST" action="?/unpublish" use:enhance>
@@ -285,24 +234,17 @@
 							method="POST"
 							action="?/delete"
 							use:enhance={() => {
-								if (!confirm('Are you sure you want to delete this page?')) {
+								if (!confirm('Delete this layout?')) {
 									return async () => {};
 								}
 								return async ({ update }) => update();
 							}}
 						>
-							<Button type="submit" variant="destructive" class="w-full">Delete Page</Button>
+							<Button type="submit" variant="destructive" class="w-full">Delete Layout</Button>
 						</form>
 					</div>
 				</Sheet.Content>
 			</Sheet.Root>
-
-			{#if data.page.status === 'published'}
-				<Button href="/{data.page.slug}" target="_blank" variant="outline" size="sm">
-					<Eye class="mr-1 h-4 w-4" />
-					View Live
-				</Button>
-			{/if}
 		</div>
 	</div>
 
@@ -314,25 +256,24 @@
 		</Alert.Root>
 	{/if}
 
-	<!-- Split pane: editor + preview -->
+	<!-- Split pane -->
 	<div class="flex flex-1 overflow-hidden" bind:this={containerRef}>
-		<!-- Block Editor (left) -->
+		<!-- Region editor (left) -->
 		<div
 			class="overflow-auto p-6"
 			style:flex-basis={previewOpen ? `${splitRatio * 100}%` : '100%'}
 			style:min-width="300px"
 		>
 			<div class="mx-auto max-w-3xl">
-				<PageBlockEditor
-					blocks={pageBlocks}
+				<LayoutRegionEditor
+					{regions}
 					templates={data.templates}
-					onchange={handleBlocksChange}
+					onchange={handleRegionsChange}
 				/>
 			</div>
 		</div>
 
 		{#if previewOpen}
-			<!-- Drag handle -->
 			<!-- svelte-ignore a11y_no_static_element_interactions -->
 			<div
 				class="divider-handle"
@@ -340,13 +281,11 @@
 				onmousedown={onDividerDown}
 			></div>
 
-			<!-- Preview panel (right) -->
 			<div
 				class="flex flex-col overflow-hidden"
 				style:flex-basis={`${(1 - splitRatio) * 100}%`}
 				style:min-width="300px"
 			>
-				<!-- Device toolbar -->
 				<div class="bg-muted/50 flex items-center gap-1 border-b px-3 py-1.5">
 					<button
 						class="rounded p-1.5 transition-colors"
@@ -383,12 +322,11 @@
 					</button>
 				</div>
 
-				<!-- Iframe container -->
 				<div class="flex flex-1 justify-center overflow-auto bg-neutral-100">
 					<iframe
 						bind:this={iframeRef}
 						src="./preview?_preview"
-						title="Page Preview"
+						title="Layout Preview"
 						class="h-full border-none bg-white transition-[width] duration-200"
 						style:width={deviceWidths[activeDevice]}
 						style:pointer-events={isDragging ? 'none' : 'auto'}
