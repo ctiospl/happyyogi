@@ -7,12 +7,14 @@
 	import { Button } from '$lib/components/ui/button';
 	import { Badge } from '$lib/components/ui/badge';
 	import * as Tabs from '$lib/components/ui/tabs';
-	import { Save, Play, AlertCircle, CheckCircle, Loader2 } from '@lucide/svelte';
+	import { Save, Play, AlertCircle, CheckCircle, Loader2, PanelLeftClose, PanelLeftOpen, PanelRightClose, PanelRightOpen } from '@lucide/svelte';
+	import { Pane, PaneResizer } from 'paneforge';
+	import { ResizablePaneGroup } from '$lib/components/ui/resizable';
 
 	interface Props {
 		template: Template;
 		onsave?: (data: { source_code: string; schema: TemplateSchema; sample_data: Record<string, unknown> }) => void;
-		onpreview?: (source: string) => Promise<{ success: boolean; html?: string; css?: string; error?: string }>;
+		onpreview?: (source: string, sampleData: Record<string, unknown>) => Promise<{ success: boolean; html?: string; css?: string; error?: string }>;
 		class?: string;
 	}
 
@@ -30,6 +32,11 @@
 	let isSaving = $state(false);
 	let hasChanges = $state(false);
 	let lastSavedSource = template.source_code;
+
+	let codePane: Pane | undefined = $state();
+	let previewPane: Pane | undefined = $state();
+	let codeCollapsed = $state(false);
+	let previewCollapsed = $state(false);
 
 	// Debounce preview updates
 	let previewTimeout: ReturnType<typeof setTimeout> | null = null;
@@ -50,7 +57,7 @@
 
 		isCompiling = true;
 		try {
-			const result = await onpreview(sourceCode);
+			const result = await onpreview(sourceCode, sampleData);
 			if (result.success) {
 				previewHtml = result.html ?? '';
 				previewCss = result.css ?? '';
@@ -143,55 +150,99 @@
 
 	<!-- Main content -->
 	<div class="editor-main">
-		<!-- Code editor (2/3 width) -->
-		<div class="editor-code">
-			<MonacoEditor
-				value={sourceCode}
-				language="svelte"
-				onchange={handleSourceChange}
-			/>
-		</div>
+		<ResizablePaneGroup direction="horizontal">
+			<Pane
+				bind:this={codePane}
+				defaultSize={60}
+				minSize={15}
+				collapsible
+				collapsedSize={0}
+				onCollapse={() => (codeCollapsed = true)}
+				onExpand={() => (codeCollapsed = false)}
+			>
+				<div class="editor-code">
+					<MonacoEditor
+						value={sourceCode}
+						language="svelte"
+						onchange={handleSourceChange}
+					/>
+				</div>
+			</Pane>
 
-		<!-- Right panel (1/3 width) -->
-		<div class="editor-panel">
-			<!-- Preview -->
-			<div class="panel-preview">
-				<PreviewFrame
-					html={previewHtml}
-					css={previewCss}
-					error={previewError}
-				/>
-			</div>
+			<PaneResizer class="split-handle">
+				<div class="split-handle-controls">
+					<button
+						class="split-handle-btn"
+						title={codeCollapsed ? 'Expand code' : 'Collapse code'}
+						onclick={() => codeCollapsed ? codePane?.expand() : codePane?.collapse()}
+					>
+						{#if codeCollapsed}
+							<PanelLeftOpen class="size-3" />
+						{:else}
+							<PanelLeftClose class="size-3" />
+						{/if}
+					</button>
+					<button
+						class="split-handle-btn"
+						title={previewCollapsed ? 'Expand preview' : 'Collapse preview'}
+						onclick={() => previewCollapsed ? previewPane?.expand() : previewPane?.collapse()}
+					>
+						{#if previewCollapsed}
+							<PanelRightOpen class="size-3" />
+						{:else}
+							<PanelRightClose class="size-3" />
+						{/if}
+					</button>
+				</div>
+			</PaneResizer>
 
-			<!-- Schema/Data tabs -->
-			<div class="panel-tabs">
-				<Tabs.Root value="schema">
-					<Tabs.List class="w-full">
-						<Tabs.Trigger value="schema" class="flex-1">Schema</Tabs.Trigger>
-						<Tabs.Trigger value="data" class="flex-1">Sample Data</Tabs.Trigger>
-					</Tabs.List>
-					<Tabs.Content value="schema" class="p-3">
-						<SchemaEditor
-							{schema}
-							onchange={(newSchema) => {
-								schema = newSchema;
-								hasChanges = true;
-							}}
+			<Pane
+				bind:this={previewPane}
+				defaultSize={40}
+				minSize={15}
+				collapsible
+				collapsedSize={0}
+				onCollapse={() => (previewCollapsed = true)}
+				onExpand={() => (previewCollapsed = false)}
+			>
+				<div class="editor-panel">
+					<div class="panel-preview">
+						<PreviewFrame
+							html={previewHtml}
+							css={previewCss}
+							error={previewError}
 						/>
-					</Tabs.Content>
-					<Tabs.Content value="data" class="p-3">
-						<SampleDataEditor
-							data={sampleData}
-							{schema}
-							onchange={(newData) => {
-								sampleData = newData;
-								hasChanges = true;
-							}}
-						/>
-					</Tabs.Content>
-				</Tabs.Root>
-			</div>
-		</div>
+					</div>
+					<div class="panel-tabs">
+						<Tabs.Root value="schema">
+							<Tabs.List class="w-full">
+								<Tabs.Trigger value="schema" class="flex-1">Schema</Tabs.Trigger>
+								<Tabs.Trigger value="data" class="flex-1">Sample Data</Tabs.Trigger>
+							</Tabs.List>
+							<Tabs.Content value="schema" class="p-3">
+								<SchemaEditor
+									{schema}
+									onchange={(newSchema) => {
+										schema = newSchema;
+										hasChanges = true;
+									}}
+								/>
+							</Tabs.Content>
+							<Tabs.Content value="data" class="p-3">
+								<SampleDataEditor
+									data={sampleData}
+									{schema}
+									onchange={(newData) => {
+										sampleData = newData;
+										hasChanges = true;
+									}}
+								/>
+							</Tabs.Content>
+						</Tabs.Root>
+					</div>
+				</div>
+			</Pane>
+		</ResizablePaneGroup>
 	</div>
 </div>
 
@@ -232,19 +283,65 @@
 	}
 
 	.editor-code {
-		flex: 2;
+		height: 100%;
 		min-width: 0;
 		overflow: hidden;
 	}
 
 	.editor-panel {
-		flex: 1;
-		min-width: 320px;
-		max-width: 480px;
+		height: 100%;
 		display: flex;
 		flex-direction: column;
-		border-left: 1px solid #3c3c3c;
 		background: #252526;
+	}
+
+	:global(.split-handle) {
+		position: relative;
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		width: 12px;
+		background: #3c3c3c;
+		cursor: col-resize;
+		flex-shrink: 0;
+	}
+
+	:global(.split-handle::after) {
+		content: '';
+		position: absolute;
+		inset: 0 -6px;
+		z-index: 1;
+	}
+
+	:global(.split-handle:hover),
+	:global(.split-handle[data-state="drag"]) {
+		background: #505050;
+	}
+
+	.split-handle-controls {
+		display: flex;
+		flex-direction: column;
+		gap: 2px;
+		z-index: 10;
+	}
+
+	.split-handle-btn {
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		width: 18px;
+		height: 18px;
+		border-radius: 3px;
+		border: none;
+		background: #3c3c3c;
+		color: #999;
+		cursor: pointer;
+		padding: 0;
+	}
+
+	.split-handle-btn:hover {
+		background: #505050;
+		color: #fff;
 	}
 
 	.panel-preview {

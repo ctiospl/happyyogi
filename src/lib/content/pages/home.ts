@@ -13,6 +13,8 @@ export const homePage = {
 			headline: 'Find Your Balance in the Heart of Mumbai',
 			subheadline:
 				'Welcome to Happy Yogi Shaala — your urban oasis where ancient yoga traditions meet modern life. Breathe deeply, move mindfully, and discover the joy of practice.',
+			backgroundImage:
+				'https://images.unsplash.com/photo-1545389336-cf090694435e?w=1920&q=80',
 			cta: {
 				text: 'Start Your Journey',
 				href: '/contact'

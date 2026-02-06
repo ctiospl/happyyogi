@@ -47,12 +47,14 @@ export const actions: Actions = {
 		throw redirect(302, `/admin/pages/${page.id}/edit`);
 	},
 
-	seed: async ({ locals }) => {
+	seed: async ({ locals, request }) => {
 		if (!locals.tenant || locals.tenantLink?.role !== 'admin') {
 			return fail(403, { error: 'Not authorized' });
 		}
 
-		const result = await seedCorePages(locals.tenant.id);
+		const formData = await request.formData();
+		const force = formData.get('force') === 'true';
+		const result = await seedCorePages(locals.tenant.id, { force });
 
 		if (result.errors.length > 0) {
 			return fail(500, {

@@ -10,7 +10,18 @@
 	import { Badge } from '$lib/components/ui/badge';
 	import * as Sheet from '$lib/components/ui/sheet';
 	import * as Alert from '$lib/components/ui/alert';
-	import { ArrowLeft, Settings, CheckCircle, AlertCircle, Eye } from '@lucide/svelte';
+	import {
+		ArrowLeft,
+		Settings,
+		CheckCircle,
+		AlertCircle,
+		Eye,
+		EyeOff,
+		Monitor,
+		Tablet,
+		Smartphone
+	} from '@lucide/svelte';
+	import { onMount } from 'svelte';
 
 	let { data, form }: { data: PageData; form: ActionData } = $props();
 
@@ -35,8 +46,72 @@
 	let blocksForm: HTMLFormElement;
 	let blocksInput: HTMLInputElement;
 
+	// Preview state
+	let previewOpen = $state(true);
+	let splitRatio = $state(0.45);
+	let isDragging = $state(false);
+	let iframeRef: HTMLIFrameElement | undefined = $state();
+	let containerRef: HTMLDivElement | undefined = $state();
+	let debounceTimer: ReturnType<typeof setTimeout> | undefined;
+
+	type DeviceSize = 'desktop' | 'tablet' | 'mobile';
+	let activeDevice: DeviceSize = $state('desktop');
+
+	const deviceWidths: Record<DeviceSize, string> = {
+		desktop: '100%',
+		tablet: '768px',
+		mobile: '375px'
+	};
+
+	// Resizable divider
+	function onDividerDown(e: MouseEvent) {
+		e.preventDefault();
+		isDragging = true;
+
+		function onMove(e: MouseEvent) {
+			if (!containerRef) return;
+			const rect = containerRef.getBoundingClientRect();
+			let ratio = (e.clientX - rect.left) / rect.width;
+			// Enforce min widths (~300px each side)
+			const minRatio = 300 / rect.width;
+			const maxRatio = 1 - minRatio;
+			ratio = Math.max(minRatio, Math.min(maxRatio, ratio));
+			splitRatio = ratio;
+		}
+
+		function onUp() {
+			isDragging = false;
+			window.removeEventListener('mousemove', onMove);
+			window.removeEventListener('mouseup', onUp);
+		}
+
+		window.addEventListener('mousemove', onMove);
+		window.addEventListener('mouseup', onUp);
+	}
+
+	// Debounced preview sync
+	function syncPreview() {
+		clearTimeout(debounceTimer);
+		debounceTimer = setTimeout(async () => {
+			if (!previewOpen || !iframeRef) return;
+			try {
+				const res = await fetch(`/api/pages/${data.page.id}/preview`, {
+					method: 'POST',
+					headers: { 'Content-Type': 'application/json' },
+					body: JSON.stringify({ blocks: pageBlocks })
+				});
+				if (!res.ok) return;
+				const { content, extraCss } = await res.json();
+				iframeRef.contentWindow?.postMessage({ type: 'preview-update', content, extraCss }, '*');
+			} catch {
+				// silently ignore preview errors
+			}
+		}, 400);
+	}
+
 	function handleBlocksChange(blocks: PageBlock[]) {
 		pageBlocks = blocks;
+		syncPreview();
 	}
 
 	function saveBlocks() {
@@ -45,6 +120,10 @@
 		saveStatus = 'saving';
 		blocksForm.requestSubmit();
 	}
+
+	onMount(() => {
+		return () => clearTimeout(debounceTimer);
+	});
 </script>
 
 <svelte:head>
@@ -104,6 +183,21 @@
 
 			<Button variant="default" size="sm" onclick={saveBlocks}>
 				Save
+			</Button>
+
+			<Button
+				variant="outline"
+				size="sm"
+				onclick={() => (previewOpen = !previewOpen)}
+				title={previewOpen ? 'Hide preview' : 'Show preview'}
+			>
+				{#if previewOpen}
+					<EyeOff class="mr-1 h-4 w-4" />
+					Preview
+				{:else}
+					<Eye class="mr-1 h-4 w-4" />
+					Preview
+				{/if}
 			</Button>
 
 			<Sheet.Root bind:open={settingsOpen}>
@@ -187,14 +281,101 @@
 		</Alert.Root>
 	{/if}
 
-	<!-- Block Editor -->
-	<div class="flex-1 overflow-auto p-6">
-		<div class="mx-auto max-w-3xl">
-			<PageBlockEditor
-				blocks={pageBlocks}
-				templates={data.templates}
-				onchange={handleBlocksChange}
-			/>
+	<!-- Split pane: editor + preview -->
+	<div class="flex flex-1 overflow-hidden" bind:this={containerRef}>
+		<!-- Block Editor (left) -->
+		<div
+			class="overflow-auto p-6"
+			style:flex-basis={previewOpen ? `${splitRatio * 100}%` : '100%'}
+			style:min-width="300px"
+		>
+			<div class="mx-auto max-w-3xl">
+				<PageBlockEditor
+					blocks={pageBlocks}
+					templates={data.templates}
+					onchange={handleBlocksChange}
+				/>
+			</div>
 		</div>
+
+		{#if previewOpen}
+			<!-- Drag handle -->
+			<!-- svelte-ignore a11y_no_static_element_interactions -->
+			<div
+				class="divider-handle"
+				class:active={isDragging}
+				onmousedown={onDividerDown}
+			></div>
+
+			<!-- Preview panel (right) -->
+			<div
+				class="flex flex-col overflow-hidden"
+				style:flex-basis={`${(1 - splitRatio) * 100}%`}
+				style:min-width="300px"
+			>
+				<!-- Device toolbar -->
+				<div class="bg-muted/50 flex items-center gap-1 border-b px-3 py-1.5">
+					<button
+						class="rounded p-1.5 transition-colors"
+						class:bg-primary={activeDevice === 'desktop'}
+						class:text-primary-foreground={activeDevice === 'desktop'}
+						class:text-muted-foreground={activeDevice !== 'desktop'}
+						class:hover:bg-muted={activeDevice !== 'desktop'}
+						onclick={() => (activeDevice = 'desktop')}
+						title="Desktop"
+					>
+						<Monitor class="h-4 w-4" />
+					</button>
+					<button
+						class="rounded p-1.5 transition-colors"
+						class:bg-primary={activeDevice === 'tablet'}
+						class:text-primary-foreground={activeDevice === 'tablet'}
+						class:text-muted-foreground={activeDevice !== 'tablet'}
+						class:hover:bg-muted={activeDevice !== 'tablet'}
+						onclick={() => (activeDevice = 'tablet')}
+						title="Tablet"
+					>
+						<Tablet class="h-4 w-4" />
+					</button>
+					<button
+						class="rounded p-1.5 transition-colors"
+						class:bg-primary={activeDevice === 'mobile'}
+						class:text-primary-foreground={activeDevice === 'mobile'}
+						class:text-muted-foreground={activeDevice !== 'mobile'}
+						class:hover:bg-muted={activeDevice !== 'mobile'}
+						onclick={() => (activeDevice = 'mobile')}
+						title="Mobile"
+					>
+						<Smartphone class="h-4 w-4" />
+					</button>
+				</div>
+
+				<!-- Iframe container -->
+				<div class="flex flex-1 justify-center overflow-auto bg-neutral-100">
+					<iframe
+						bind:this={iframeRef}
+						src="./preview?_preview"
+						title="Page Preview"
+						class="h-full border-none bg-white transition-[width] duration-200"
+						style:width={deviceWidths[activeDevice]}
+						style:pointer-events={isDragging ? 'none' : 'auto'}
+					></iframe>
+				</div>
+			</div>
+		{/if}
 	</div>
 </div>
+
+<style>
+	.divider-handle {
+		width: 4px;
+		cursor: col-resize;
+		background: hsl(var(--border));
+		flex-shrink: 0;
+		transition: background 0.15s;
+	}
+	.divider-handle:hover,
+	.divider-handle.active {
+		background: hsl(var(--primary));
+	}
+</style>

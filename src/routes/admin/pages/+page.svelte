@@ -8,7 +8,7 @@
 	import { Badge } from '$lib/components/ui/badge';
 	import * as Dialog from '$lib/components/ui/dialog';
 	import * as Table from '$lib/components/ui/table';
-	import { Plus, Edit, Eye, Download } from '@lucide/svelte';
+	import { Plus, Edit, Eye, Download, RefreshCw } from '@lucide/svelte';
 
 	let { data, form }: { data: PageData; form: ActionData } = $props();
 
@@ -39,24 +39,30 @@
 	<div class="mb-8 flex items-center justify-between">
 		<h1 class="text-3xl font-bold">Pages</h1>
 		<div class="flex gap-2">
-			{#if !data.hasCorePages}
-				<form
-					method="POST"
-					action="?/seed"
-					use:enhance={() => {
-						seeding = true;
-						return async ({ update }) => {
-							await update();
-							seeding = false;
-						};
-					}}
-				>
+			<form
+				method="POST"
+				action="?/seed"
+				use:enhance={() => {
+					seeding = true;
+					return async ({ update }) => {
+						await update();
+						seeding = false;
+					};
+				}}
+			>
+				{#if data.hasCorePages}
+					<input type="hidden" name="force" value="true" />
+					<Button type="submit" variant="outline" size="sm" disabled={seeding}>
+						<RefreshCw class="mr-2 h-4 w-4" />
+						{seeding ? 'Reseeding...' : 'Reseed Pages'}
+					</Button>
+				{:else}
 					<Button type="submit" variant="outline" disabled={seeding}>
 						<Download class="mr-2 h-4 w-4" />
 						{seeding ? 'Seeding...' : 'Seed Core Pages'}
 					</Button>
-				</form>
-			{/if}
+				{/if}
+			</form>
 			<Dialog.Root bind:open={dialogOpen}>
 			<Dialog.Trigger>
 				{#snippet child({ props })}
@@ -104,7 +110,7 @@
 
 	{#if form?.success}
 		<div class="mb-6 rounded-lg bg-green-500/10 p-4 text-green-600">
-			Core pages seeded successfully! Created {form.seedResult?.created?.length ?? 0} pages.
+			Pages synced! Created {form.seedResult?.created?.length ?? 0}, updated {form.seedResult?.updated?.length ?? 0}.
 		</div>
 	{/if}
 
