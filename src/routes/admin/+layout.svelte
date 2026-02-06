@@ -14,7 +14,8 @@
 		Menu,
 		BookOpen,
 		Code,
-		Columns3
+		Columns3,
+		ClipboardList
 	} from '@lucide/svelte';
 
 	let { data, children }: { data: LayoutData; children: any } = $props();
@@ -26,6 +27,7 @@
 		{ href: '/admin/payments', label: 'Payments', icon: CreditCard },
 		{ href: '/admin/users', label: 'Users', icon: Users },
 		{ href: '/admin/pages', label: 'Pages', icon: FileText },
+		{ href: '/admin/forms', label: 'Forms', icon: ClipboardList },
 		{ href: '/admin/layouts', label: 'Layouts', icon: Columns3 },
 		{ href: '/admin/templates', label: 'Templates', icon: Code },
 		{ href: '/admin/settings', label: 'Settings', icon: Settings }

@@ -131,6 +131,15 @@ export interface HtmlBlock extends BaseBlock {
 	css?: string;
 }
 
+// Inline form block
+export interface FormBlock extends BaseBlock {
+	type: 'form';
+	form_id: string;
+	fields: unknown;
+	settings: unknown;
+	conditional_rules: unknown;
+}
+
 // Union of all block types
 export type ContentBlock =
 	| HeroBlock
@@ -141,7 +150,8 @@ export type ContentBlock =
 	| InstructorGridBlock
 	| ValuesGridBlock
 	| StoryBlock
-	| HtmlBlock;
+	| HtmlBlock
+	| FormBlock;
 
 // Page content wrapper
 export interface PageContent {

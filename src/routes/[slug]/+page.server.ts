@@ -3,7 +3,7 @@ import { getPageBySlug } from '$lib/server/pages';
 import { error } from '@sveltejs/kit';
 
 // Reserved slugs that shouldn't be handled by this catch-all
-const RESERVED_SLUGS = ['api', 'admin', 'workshops', 'bookings', 'auth', 'login'];
+const RESERVED_SLUGS = ['api', 'admin', 'workshops', 'bookings', 'auth', 'login', 'forms'];
 
 export const load: PageServerLoad = async ({ params, locals }) => {
 	// Skip reserved paths

@@ -3,6 +3,8 @@
 	import SchemaFieldEditor from './SchemaFieldEditor.svelte';
 	import { Button } from '$lib/components/ui/button';
 	import { Plus } from '@lucide/svelte';
+	import { dndzone } from 'svelte-dnd-action';
+	import { flip } from 'svelte/animate';
 
 	interface Props {
 		schema: TemplateSchema;
@@ -12,11 +14,14 @@
 
 	let { schema, onchange, class: className = '' }: Props = $props();
 
-	let fields = $state<TemplateSchemaField[]>([...schema.fields]);
+	type DndField = TemplateSchemaField & { id: string };
+	let fields = $state<DndField[]>(schema.fields.map(f => ({ ...f, id: f.key })));
 
 	function addField() {
-		const newField: TemplateSchemaField = {
-			key: `field_${fields.length + 1}`,
+		const key = `field_${fields.length + 1}`;
+		const newField: DndField = {
+			key,
+			id: key,
 			type: 'text',
 			label: `Field ${fields.length + 1}`
 		};
@@ -25,7 +30,16 @@
 	}
 
 	function updateField(index: number, field: TemplateSchemaField) {
-		fields = fields.map((f, i) => (i === index ? field : f));
+		fields = fields.map((f, i) => (i === index ? { ...field, id: field.key } : f));
+		emitChange();
+	}
+
+	function handleDndConsider(e: CustomEvent<{ items: DndField[] }>) {
+		fields = e.detail.items;
+	}
+
+	function handleDndFinalize(e: CustomEvent<{ items: DndField[] }>) {
+		fields = e.detail.items;
 		emitChange();
 	}
 
@@ -35,7 +49,9 @@
 	}
 
 	function emitChange() {
-		onchange?.({ fields });
+		// Strip DnD `id` property before emitting
+		const clean = fields.map(({ id, ...rest }) => rest);
+		onchange?.({ fields: clean });
 	}
 </script>
 
@@ -54,13 +70,20 @@
 			<p class="hint">Add fields to define editable props for this template.</p>
 		</div>
 	{:else}
-		<div class="fields-list">
-			{#each fields as field, index (field.key + index)}
-				<SchemaFieldEditor
-					{field}
-					onchange={(f) => updateField(index, f)}
-					ondelete={() => deleteField(index)}
-				/>
+		<div
+			class="fields-list"
+			use:dndzone={{ items: fields, flipDurationMs: 200, type: 'schema-fields' }}
+			onconsider={handleDndConsider}
+			onfinalize={handleDndFinalize}
+		>
+			{#each fields as field, index (field.id)}
+				<div animate:flip={{ duration: 200 }}>
+					<SchemaFieldEditor
+						{field}
+						onchange={(f) => updateField(index, f)}
+						ondelete={() => deleteField(index)}
+					/>
+				</div>
 			{/each}
 		</div>
 	{/if}

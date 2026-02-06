@@ -2,6 +2,7 @@ import type { PageServerLoad, Actions } from './$types';
 import { getPageById, updatePage, publishPage, unpublishPage, deletePage } from '$lib/server/pages';
 import { getTenantTemplates } from '$lib/server/templates/crud';
 import { getLayouts } from '$lib/server/layouts';
+import { getForms } from '$lib/server/forms';
 import { error, fail, redirect } from '@sveltejs/kit';
 
 export const load: PageServerLoad = async ({ params, locals }) => {
@@ -19,15 +20,17 @@ export const load: PageServerLoad = async ({ params, locals }) => {
 		throw error(404, 'Page not found');
 	}
 
-	const [templates, layouts] = await Promise.all([
+	const [templates, layouts, forms] = await Promise.all([
 		getTenantTemplates(locals.tenant.id),
-		getLayouts(locals.tenant.id)
+		getLayouts(locals.tenant.id),
+		getForms(locals.tenant.id)
 	]);
 
 	return {
 		page,
 		templates,
 		layouts,
+		forms,
 		tenant: locals.tenant
 	};
 };

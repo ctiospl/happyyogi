@@ -326,6 +326,7 @@
 				<PageBlockEditor
 					blocks={pageBlocks}
 					templates={data.templates}
+					forms={data.forms}
 					onchange={handleBlocksChange}
 				/>
 			</div>

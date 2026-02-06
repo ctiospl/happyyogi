@@ -9,6 +9,7 @@
 import type { PageBlock } from '$lib/server/db/schema';
 import type { PageContent, ContentBlock } from '$lib/types';
 import { getTemplatesByIds, extractStyleBlock, extractHtmlMarkup } from './crud';
+import { getFormById } from '$lib/server/forms';
 
 /** Known section types that PageRenderer has dedicated components for */
 const KNOWN_SECTION_TYPES = new Set([
@@ -30,7 +31,7 @@ export async function resolvePageBlocks(blocks: PageBlock[]): Promise<ResolveRes
 		return { content: { version: 1, blocks: [] }, extraCss: '' };
 	}
 
-	const templateIds = [...new Set(blocks.map((b) => b.template_id))];
+	const templateIds = [...new Set(blocks.filter(b => b.template_id !== '__form__').map((b) => b.template_id))];
 	const templates = await getTemplatesByIds(templateIds);
 	const templateMap = new Map(templates.map((t) => [t.id, t]));
 
@@ -39,6 +40,27 @@ export async function resolvePageBlocks(blocks: PageBlock[]): Promise<ResolveRes
 
 	for (let i = 0; i < blocks.length; i++) {
 		const block = blocks[i];
+
+		// Handle form blocks
+		if (block.template_id === '__form__') {
+			const formId = block.props.form_id as string;
+			if (formId) {
+				const form = await getFormById(formId);
+				if (form) {
+					contentBlocks.push({
+						type: 'form',
+						id: block.id,
+						order: i,
+						form_id: form.id,
+						fields: form.fields,
+						settings: form.settings,
+						conditional_rules: form.conditional_rules
+					} as ContentBlock);
+				}
+			}
+			continue;
+		}
+
 		const template = templateMap.get(block.template_id);
 		if (!template) continue;
 

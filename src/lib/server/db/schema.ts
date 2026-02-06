@@ -19,6 +19,8 @@ export type LayoutRegionName = 'header' | 'footer' | 'announcement_bar' | 'sideb
 export type ContactStatus = 'new' | 'read' | 'replied' | 'archived';
 export type OtpPurpose = 'login' | 'signup' | 'verify_phone';
 export type AuthMethod = 'phone_otp' | 'email_otp' | 'password';
+export type FormType = 'standalone' | 'inline';
+export type FormStatus = 'draft' | 'published' | 'archived';
 
 // ============================================
 // TENANTS
@@ -495,6 +497,104 @@ export type AuditLog = Selectable<AuditLogsTable>;
 export type NewAuditLog = Insertable<AuditLogsTable>;
 
 // ============================================
+// FORMS
+// ============================================
+export type FormFieldType =
+	| 'text'
+	| 'email'
+	| 'phone'
+	| 'textarea'
+	| 'number'
+	| 'select'
+	| 'multi_select'
+	| 'checkbox'
+	| 'radio'
+	| 'date'
+	| 'date_range'
+	| 'time'
+	| 'file'
+	| 'rating'
+	| 'scale'
+	| 'address'
+	| 'signature'
+	| 'heading';
+
+export interface FormFieldDef {
+	id: string;
+	type: FormFieldType;
+	label: string;
+	placeholder?: string;
+	required?: boolean;
+	options?: { value: string; label: string }[];
+	validation?: {
+		min?: number;
+		max?: number;
+		min_length?: number;
+		max_length?: number;
+		pattern?: string;
+		accept?: string; // file types
+		max_size_mb?: number;
+	};
+	step?: number; // which step this field belongs to (0-indexed)
+	// scale/rating specific
+	scale_min?: number;
+	scale_max?: number;
+	scale_labels?: { min: string; max: string };
+	// address sub-fields config
+	address_fields?: ('street' | 'city' | 'state' | 'zip' | 'country')[];
+}
+
+export interface FormConditionalRule {
+	field_id: string;
+	operator: 'equals' | 'not_equals' | 'contains' | 'not_empty' | 'empty' | 'gt' | 'lt';
+	value: string;
+	target_field_id: string;
+	action: 'show' | 'hide';
+}
+
+export interface FormSettings {
+	submit_label?: string;
+	success_message?: string;
+	redirect_url?: string;
+	multi_step?: boolean;
+	steps?: { label: string }[];
+}
+
+export interface FormsTable {
+	id: Generated<string>;
+	tenant_id: string;
+	title: string;
+	slug: string;
+	type: FormType;
+	fields: Generated<Json<FormFieldDef[]>>;
+	settings: Generated<Json<FormSettings>>;
+	conditional_rules: Generated<Json<FormConditionalRule[]>>;
+	status: FormStatus;
+	created_at: Generated<Timestamp>;
+	updated_at: Timestamp;
+}
+
+export type Form = Selectable<FormsTable>;
+export type NewForm = Insertable<FormsTable>;
+export type FormUpdate = Updateable<FormsTable>;
+
+// ============================================
+// FORM SUBMISSIONS
+// ============================================
+export interface FormSubmissionsTable {
+	id: Generated<string>;
+	tenant_id: string;
+	form_id: string;
+	data: Json<Record<string, unknown>>;
+	metadata: Generated<Json<Record<string, unknown>>>;
+	submitted_at: Generated<Timestamp>;
+}
+
+export type FormSubmission = Selectable<FormSubmissionsTable>;
+export type NewFormSubmission = Insertable<FormSubmissionsTable>;
+export type FormSubmissionUpdate = Updateable<FormSubmissionsTable>;
+
+// ============================================
 // DATABASE INTERFACE
 // ============================================
 export interface Database {
@@ -515,4 +615,6 @@ export interface Database {
 	media: MediaTable;
 	contact_submissions: ContactSubmissionsTable;
 	audit_logs: AuditLogsTable;
+	forms: FormsTable;
+	form_submissions: FormSubmissionsTable;
 }
