@@ -30,6 +30,7 @@
 		required={field.required}
 		minlength={field.validation?.min_length}
 		maxlength={field.validation?.max_length}
+		pattern={field.validation?.pattern}
 		oninput={(e: Event) => onchange((e.target as HTMLInputElement).value)}
 	/>
 </div>

@@ -37,7 +37,6 @@
 			{fields}
 			{settings}
 			{conditionalRules}
-			action="?/"
 			submitMethod="form"
 		/>
 	{/if}

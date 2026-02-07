@@ -52,6 +52,24 @@
 		['text', 'email', 'phone', 'textarea'].includes(field.type)
 	);
 
+	const VALIDATION_PRESETS: { value: string; label: string; pattern?: string }[] = [
+		{ value: '', label: 'None' },
+		{ value: 'email', label: 'Email address', pattern: '^[^\\s@]+@[^\\s@]+\\.[^\\s@]+$' },
+		{ value: 'phone', label: 'Phone number', pattern: '^[+]?[\\d\\s\\-().]{7,20}$' },
+		{ value: 'url', label: 'URL', pattern: '^https?://.+' },
+		{ value: 'letters', label: 'Letters only', pattern: '^[A-Za-z\\s]+$' },
+		{ value: 'alphanumeric', label: 'Letters & numbers', pattern: '^[A-Za-z0-9\\s]+$' },
+		{ value: 'pin', label: 'PIN code (6 digits)', pattern: '^\\d{6}$' },
+		{ value: 'custom', label: 'Custom (regex)' }
+	];
+
+	const selectedPreset = $derived.by(() => {
+		const p = field.validation?.pattern;
+		if (!p) return '';
+		const match = VALIDATION_PRESETS.find((v) => v.pattern && v.pattern === p);
+		return match ? match.value : 'custom';
+	});
+
 	const ADDRESS_FIELD_OPTIONS = ['street', 'city', 'state', 'zip', 'country'] as const;
 </script>
 
@@ -201,6 +219,40 @@
 				/>
 			</div>
 		</div>
+		<div>
+			<Label for="field-validation">Validation</Label>
+			<select
+				id="field-validation"
+				value={selectedPreset}
+				onchange={(e: Event) => {
+					const val = (e.target as HTMLSelectElement).value;
+					if (!val) {
+						updateValidation({ pattern: undefined });
+					} else if (val === 'custom') {
+						updateValidation({ pattern: field.validation?.pattern || '' });
+					} else {
+						const preset = VALIDATION_PRESETS.find((p) => p.value === val);
+						updateValidation({ pattern: preset?.pattern });
+					}
+				}}
+				class="border-input bg-background flex h-10 w-full rounded-md border px-3 py-2 text-sm"
+			>
+				{#each VALIDATION_PRESETS as preset}
+					<option value={preset.value}>{preset.label}</option>
+				{/each}
+			</select>
+		</div>
+		{#if selectedPreset === 'custom'}
+			<div>
+				<Label for="field-pattern">Regex Pattern</Label>
+				<Input
+					id="field-pattern"
+					value={field.validation?.pattern ?? ''}
+					placeholder="e.g. ^[A-Z].*$"
+					oninput={(e: Event) => updateValidation({ pattern: (e.target as HTMLInputElement).value || undefined })}
+				/>
+			</div>
+		{/if}
 	{/if}
 
 	<!-- File upload config -->

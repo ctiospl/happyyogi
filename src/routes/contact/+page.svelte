@@ -1,13 +1,15 @@
 <script lang="ts">
-	import type { PageData } from './$types';
+	import type { PageData, ActionData } from './$types';
+	import type { FormFieldDef, FormConditionalRule, FormSettings } from '$lib/server/db/schema';
 	import { contactPage } from '$lib/content/pages/contact';
 	import { SEOHead } from '$lib/components/seo';
 	import { Button } from '$lib/components/ui/button';
 	import { Card, CardContent } from '$lib/components/ui/card';
 	import { Phone, Mail, Instagram, MapPin, Clock } from '@lucide/svelte';
 	import PageRenderer from '$lib/components/PageRenderer.svelte';
+	import FormRenderer from '$lib/components/forms/FormRenderer.svelte';
 
-	let { data }: { data: PageData } = $props();
+	let { data, form }: { data: PageData; form: ActionData } = $props();
 
 	const useStructured = $derived(data.useStructuredContent && data.structuredContent);
 
@@ -34,7 +36,7 @@
 			landmark?: string;
 		};
 	};
-	const contactForm = contactPage.sections.find((s) => s.type === 'contact-form') as {
+	const contactFormContent = contactPage.sections.find((s) => s.type === 'contact-form') as {
 		type: 'contact-form';
 		heading: string;
 		subheading: string;
@@ -60,12 +62,18 @@
 		instagram: Instagram
 	};
 
-	let formData = $state({
-		name: '',
-		email: '',
-		phone: '',
-		message: ''
-	});
+	function parseJson<T>(raw: unknown, fallback: T): T {
+		if (!raw) return fallback;
+		if (typeof raw === 'string') {
+			try { return JSON.parse(raw); } catch { return fallback; }
+		}
+		return raw as T;
+	}
+
+	const dbForm = $derived(data.contactForm);
+	const fields = $derived(dbForm ? parseJson<FormFieldDef[]>(dbForm.fields, []) : []);
+	const settings = $derived(dbForm ? parseJson<FormSettings>(dbForm.settings, {}) : {});
+	const conditionalRules = $derived(dbForm ? parseJson<FormConditionalRule[]>(dbForm.conditional_rules, []) : []);
 </script>
 
 <SEOHead
@@ -110,46 +118,64 @@
 		<div class="grid gap-12 lg:grid-cols-2">
 			<!-- Contact Form -->
 			<div>
-				<h2 class="mb-2 text-2xl font-bold text-foreground">{contactForm.heading}</h2>
-				<p class="mb-8 text-muted-foreground">{contactForm.subheading}</p>
+				<h2 class="mb-2 text-2xl font-bold text-foreground">{contactFormContent.heading}</h2>
+				<p class="mb-8 text-muted-foreground">{contactFormContent.subheading}</p>
 
-				<form method="POST" class="space-y-6">
-					{#each contactForm.fields as field (field.name)}
-						<div class="relative">
-							{#if field.type === 'textarea'}
-								<textarea
-									name={field.name}
-									id={field.name}
-									required={field.required}
-									placeholder=" "
-									rows={4}
-									bind:value={formData[field.name as keyof typeof formData]}
-									class="peer w-full resize-none rounded-xl border border-input bg-card px-4 pt-6 pb-2 text-foreground placeholder-transparent shadow-soft transition-all focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20"
-								></textarea>
-							{:else}
-								<input
-									type={field.type}
-									name={field.name}
-									id={field.name}
-									required={field.required}
-									placeholder=" "
-									bind:value={formData[field.name as keyof typeof formData]}
-									class="peer w-full rounded-xl border border-input bg-card px-4 pt-6 pb-2 text-foreground placeholder-transparent shadow-soft transition-all focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20"
-								/>
-							{/if}
-							<label
-								for={field.name}
-								class="pointer-events-none absolute left-4 top-4 origin-left text-muted-foreground transition-all peer-placeholder-shown:translate-y-0 peer-placeholder-shown:scale-100 peer-focus:-translate-y-2 peer-focus:scale-75 peer-focus:text-primary peer-[:not(:placeholder-shown)]:-translate-y-2 peer-[:not(:placeholder-shown)]:scale-75"
-							>
-								{field.label}{#if field.required}<span class="text-destructive">*</span>{/if}
-							</label>
+				{#if dbForm}
+					{#if form?.success}
+						<div class="py-8 text-center">
+							<div class="mb-2 text-2xl">&#10003;</div>
+							<p class="text-lg font-medium">
+								{settings.success_message ?? "Thank you! We'll get back to you shortly."}
+							</p>
 						</div>
-					{/each}
+					{:else}
+						<FormRenderer
+							formId={dbForm.id}
+							{fields}
+							{settings}
+							{conditionalRules}
+							submitMethod="form"
+						/>
+					{/if}
+				{:else}
+					<!-- Fallback: hardcoded form when DB form not available -->
+					<form method="POST" class="space-y-6">
+						{#each contactFormContent.fields as field (field.name)}
+							<div class="relative">
+								{#if field.type === 'textarea'}
+									<textarea
+										name={field.name}
+										id={field.name}
+										required={field.required}
+										placeholder=" "
+										rows={4}
+										class="peer w-full resize-none rounded-xl border border-input bg-card px-4 pt-6 pb-2 text-foreground placeholder-transparent shadow-soft transition-all focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20"
+									></textarea>
+								{:else}
+									<input
+										type={field.type}
+										name={field.name}
+										id={field.name}
+										required={field.required}
+										placeholder=" "
+										class="peer w-full rounded-xl border border-input bg-card px-4 pt-6 pb-2 text-foreground placeholder-transparent shadow-soft transition-all focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20"
+									/>
+								{/if}
+								<label
+									for={field.name}
+									class="pointer-events-none absolute left-4 top-4 origin-left text-muted-foreground transition-all peer-placeholder-shown:translate-y-0 peer-placeholder-shown:scale-100 peer-focus:-translate-y-2 peer-focus:scale-75 peer-focus:text-primary peer-[:not(:placeholder-shown)]:-translate-y-2 peer-[:not(:placeholder-shown)]:scale-75"
+								>
+									{field.label}{#if field.required}<span class="text-destructive">*</span>{/if}
+								</label>
+							</div>
+						{/each}
 
-					<Button type="submit" size="lg" class="w-full bg-accent text-accent-foreground hover:bg-accent/90">
-						{contactForm.submitLabel}
-					</Button>
-				</form>
+						<Button type="submit" size="lg" class="w-full bg-accent text-accent-foreground hover:bg-accent/90">
+							{contactFormContent.submitLabel}
+						</Button>
+					</form>
+				{/if}
 			</div>
 
 			<!-- Contact Info Cards -->
