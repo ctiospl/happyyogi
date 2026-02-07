@@ -1,21 +1,16 @@
 /**
  * Resolve PageBlock[] (DB format) → PageContent (ContentBlock[] for PageRenderer)
  *
- * PageBlock stores {id, template_id, props}.
- * ContentBlock stores {type, id, ...props} where type = template slug.
- * This module bridges them by batch-fetching templates and mapping.
+ * All templates are rendered through the sandboxed SSR pipeline.
+ * No more KNOWN_SECTION_TYPES branching — every template produces HTML.
  */
 
 import type { PageBlock } from '$lib/server/db/schema';
 import type { PageContent, ContentBlock } from '$lib/types';
-import { getTemplatesByIds, extractStyleBlock, extractHtmlMarkup } from './crud';
+import { getTemplatesByIds } from './crud';
 import { getFormById } from '$lib/server/forms';
-
-/** Known section types that PageRenderer has dedicated components for */
-const KNOWN_SECTION_TYPES = new Set([
-	'hero', 'services-grid', 'about-snippet', 'instructor-grid',
-	'testimonial-carousel', 'cta-banner', 'values-grid', 'story', 'html'
-]);
+import { renderInSandbox } from './sandbox';
+import { sanitizeRenderedHtml } from './sanitize';
 
 export interface ResolveResult {
 	content: PageContent;
@@ -24,7 +19,7 @@ export interface ResolveResult {
 
 /**
  * Convert PageBlock[] to PageContent for rendering by PageRenderer.
- * Batch-fetches templates, maps template slug → block type, merges props.
+ * Batch-fetches templates, renders each through sandbox SSR.
  */
 export async function resolvePageBlocks(blocks: PageBlock[]): Promise<ResolveResult> {
 	if (blocks.length === 0) {
@@ -64,32 +59,38 @@ export async function resolvePageBlocks(blocks: PageBlock[]): Promise<ResolveRes
 		const template = templateMap.get(block.template_id);
 		if (!template) continue;
 
-		// Collect template-specific CSS
-		if (template.source_code) {
-			const css = extractStyleBlock(template.source_code);
-			if (css) cssParts.push(css);
+		// If template has a compiled SSR bundle, render via sandbox
+		if (template.compiled_js) {
+			const result = await renderInSandbox(
+				template.compiled_js,
+				{ context: {}, props: block.props }
+			);
+
+			if (!result.error) {
+				contentBlocks.push({
+					type: 'html',
+					id: block.id,
+					order: i,
+					html: sanitizeRenderedHtml(result.html),
+					css: result.css || undefined,
+					templateId: template.id
+				} as ContentBlock);
+
+				if (result.css) cssParts.push(result.css);
+				if (template.compiled_css) cssParts.push(template.compiled_css);
+				continue;
+			}
+			// Fall through to fallback if sandbox errored
+			console.warn(`Sandbox render failed for template ${template.slug}:`, result.error);
 		}
 
-		if (KNOWN_SECTION_TYPES.has(template.slug)) {
-			// Known section type — pass props directly to dedicated component
-			contentBlocks.push({
-				type: template.slug,
-				id: block.id,
-				order: i,
-				...block.props
-			} as ContentBlock);
-		} else {
-			// Unknown type (e.g. layout templates) — pre-render to HTML via AST
-			const html = template.source_code
-				? extractHtmlMarkup(template.source_code, block.props as Record<string, unknown>)
-				: '';
-			contentBlocks.push({
-				type: 'html',
-				id: block.id,
-				order: i,
-				html
-			} as ContentBlock);
-		}
+		// Fallback: pass as html block with empty content
+		contentBlocks.push({
+			type: 'html',
+			id: block.id,
+			order: i,
+			html: `<!-- Template "${template.slug}" not compiled -->`
+		} as ContentBlock);
 	}
 
 	return {

@@ -124,11 +124,12 @@ export interface StoryBlock extends BaseBlock {
 	image?: string;
 }
 
-// Raw HTML block - for custom content
+// Raw HTML block - for custom content or sandbox-rendered templates
 export interface HtmlBlock extends BaseBlock {
 	type: 'html';
 	html: string;
 	css?: string;
+	templateId?: string; // source template ID (for hydration)
 }
 
 // Inline form block

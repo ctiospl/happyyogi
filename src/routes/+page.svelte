@@ -82,7 +82,7 @@
 />
 
 {#if useStructured && data.structuredContent}
-	<PageRenderer content={data.structuredContent} {instructors} extraCss={data.extraCss} />
+	<PageRenderer content={data.structuredContent} extraCss={data.extraCss} />
 {:else}
 <!-- Hero Section with Divya Teaching Class -->
 <section class="relative min-h-[90vh] overflow-hidden">

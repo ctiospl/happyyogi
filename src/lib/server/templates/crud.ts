@@ -4,7 +4,8 @@
 
 import { db } from '$lib/server/db';
 import type { Template, NewTemplate, TemplateUpdate, TemplateSchema } from '$lib/server/db/schema';
-import { compileTemplate } from './compiler';
+import { compileAndBundle } from './compiler';
+import { renderInSandbox } from './sandbox';
 import { parse } from 'svelte/compiler';
 
 // ============================================
@@ -93,19 +94,17 @@ export async function getTemplateBySlug(
 export async function createTemplate(
 	data: Omit<NewTemplate, 'id' | 'created_at'>
 ): Promise<Template> {
-	// Compile the source code if provided
+	// Compile + bundle the source code if provided
 	let compiledJs: string | null = null;
 	let compiledCss: string | null = null;
 	let compileError: string | null = null;
 
 	if (data.source_code) {
-		const result = await compileTemplate(data.source_code, {
-			filename: `${data.slug}.svelte`,
-			name: data.name.replace(/[^a-zA-Z0-9]/g, '')
-		});
+		const schema = typeof data.schema === 'string' ? JSON.parse(data.schema) : data.schema;
+		const result = await compileAndBundle(data.source_code, schema);
 
-		if (result.success) {
-			compiledJs = result.js ?? null;
+		if (result.ssrBundle) {
+			compiledJs = result.ssrBundle;
 			compiledCss = result.css ?? null;
 		} else {
 			compileError = result.error ?? null;
@@ -151,13 +150,11 @@ export async function updateTemplate(
 	let compileError: string | null | undefined;
 
 	if (data.source_code !== undefined) {
-		const result = await compileTemplate(data.source_code, {
-			filename: `template-${id}.svelte`,
-			name: 'Template'
-		});
+		const schema = typeof data.schema === 'string' ? JSON.parse(data.schema) : data.schema;
+		const result = await compileAndBundle(data.source_code, schema);
 
-		if (result.success) {
-			compiledJs = result.js ?? null;
+		if (result.ssrBundle) {
+			compiledJs = result.ssrBundle;
 			compiledCss = result.css ?? null;
 			compileError = null;
 		} else {
@@ -211,20 +208,18 @@ export async function publishTemplate(id: string): Promise<Template | null> {
 	if (!template) return null;
 
 	const sourceToPublish = template.draft_source_code || template.source_code;
+	const schema = typeof template.schema === 'string' ? JSON.parse(template.schema) : template.schema;
 
-	const compiled = await compileTemplate(sourceToPublish, {
-		filename: `${template.slug}.svelte`,
-		name: template.name.replace(/[^a-zA-Z0-9]/g, '')
-	});
+	const compiled = await compileAndBundle(sourceToPublish, schema);
 
 	const result = await db
 		.updateTable('templates')
 		.set({
 			source_code: sourceToPublish,
 			draft_source_code: null,
-			compiled_js: compiled.success ? (compiled.js ?? null) : null,
-			compiled_css: compiled.success ? (compiled.css ?? null) : null,
-			compile_error: compiled.success ? null : (compiled.error ?? null),
+			compiled_js: compiled.ssrBundle ?? null,
+			compiled_css: compiled.css ?? null,
+			compile_error: compiled.error ?? null,
 			updated_at: new Date()
 		})
 		.where('id', '=', id)
@@ -250,14 +245,12 @@ export async function deleteTemplate(id: string): Promise<void> {
 // ============================================
 
 /**
- * Compile a template without saving (for preview)
- *
- * For Phase 1: We validate the template and extract static HTML for preview.
- * This provides visual feedback without needing full SSR execution.
+ * Compile a template without saving (for preview).
+ * Uses the same sandbox SSR pipeline as production rendering.
  */
 export async function compileTemplatePreview(
 	sourceCode: string,
-	_schema?: TemplateSchema,
+	schema?: TemplateSchema,
 	sampleData?: Record<string, unknown>
 ): Promise<{
 	success: boolean;
@@ -265,29 +258,20 @@ export async function compileTemplatePreview(
 	css?: string;
 	error?: string;
 }> {
-	// Validate the template compiles
-	const result = await compileTemplate(sourceCode, {
-		filename: 'Preview.svelte',
-		name: 'Preview'
-	});
-
-	if (!result.success) {
-		return {
-			success: false,
-			error: result.error
-		};
+	const result = await compileAndBundle(sourceCode, schema);
+	if (!result.ssrBundle) {
+		return { success: false, error: result.error };
 	}
 
-	// Extract HTML markup for preview (strip script/style tags)
-	const html = extractHtmlMarkup(sourceCode, sampleData ?? {});
-
-	// Extract CSS from style block
-	const css = extractStyleBlock(sourceCode);
+	const rendered = await renderInSandbox(result.ssrBundle, sampleData ?? {});
+	if (rendered.error) {
+		return { success: false, error: rendered.error };
+	}
 
 	return {
 		success: true,
-		html,
-		css
+		html: rendered.html,
+		css: result.css || rendered.css
 	};
 }
 

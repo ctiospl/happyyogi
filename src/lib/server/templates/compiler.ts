@@ -75,12 +75,8 @@ const FORBIDDEN_PATTERNS = [
 	/\b__filename\b/,
 
 	// Import meta (except for Vite-safe ones)
-	/import\.meta\.env\./,
-
-	// Raw HTML injection with dynamic content
-	// Allowed: {@html "<p>static</p>"}
-	// Forbidden: {@html variable}
-	/\{@html\s+[^"'`]/
+	/import\.meta\.env\./
+	// {@html} now allowed — output is sanitized by sanitize.ts
 ];
 
 // ============================================
@@ -265,6 +261,8 @@ export async function compileTemplateDual(
 /**
  * Wrap raw template content in a Svelte component structure
  * if it doesn't already have one.
+ *
+ * Injects `let { context, props } = $props()` for namespaced access.
  */
 export function normalizeTemplate(source: string, schema?: { fields: { key: string }[] }): string {
 	// If source already has a script tag, return as-is
@@ -272,14 +270,66 @@ export function normalizeTemplate(source: string, schema?: { fields: { key: stri
 		return source;
 	}
 
-	// Generate props from schema
-	const props = schema?.fields.map((f) => f.key) || [];
-	const propsDeclaration = props.length > 0 ? `let { ${props.join(', ')} } = $props();` : '';
-
-	// Wrap in component structure
+	// Always inject context + props (namespaced)
 	return `<script>
-${propsDeclaration}
+let { context = {}, props = {} } = $props();
 </script>
 
 ${source}`;
+}
+
+// ============================================
+// COMPILE AND BUNDLE PIPELINE
+// ============================================
+
+export interface CompileAndBundleResult {
+	ssrBundle?: string;
+	css?: string;
+	error?: string;
+	warnings?: Warning[];
+}
+
+/**
+ * Full pipeline: normalize → validate → compile → bundle
+ * Returns a self-contained SSR bundle ready for vm execution.
+ */
+export async function compileAndBundle(
+	source: string,
+	schema?: { fields: { key: string }[] }
+): Promise<CompileAndBundleResult> {
+	const { bundleSSR } = await import('./bundler');
+
+	// 1. Normalize (inject context/props if no script tag)
+	const normalized = normalizeTemplate(source, schema);
+
+	// 2. Validate
+	const validation = validateTemplate(normalized);
+	if (!validation.valid) {
+		return { error: validation.errors.join('\n'), warnings: [] };
+	}
+
+	// 3. Compile with Svelte compiler (server mode)
+	const compiled = await compileTemplate(normalized, {
+		filename: 'Template.svelte',
+		name: 'Template'
+	});
+
+	if (!compiled.success || !compiled.js) {
+		return { error: compiled.error || 'Compilation failed', warnings: compiled.warnings };
+	}
+
+	// 4. Bundle with esbuild (resolves imports, creates self-contained IIFE)
+	try {
+		const ssrBundle = await bundleSSR(compiled.js);
+		return {
+			ssrBundle,
+			css: compiled.css,
+			warnings: compiled.warnings
+		};
+	} catch (err) {
+		return {
+			error: `Bundle failed: ${err instanceof Error ? err.message : String(err)}`,
+			warnings: compiled.warnings
+		};
+	}
 }

@@ -184,7 +184,8 @@ const htmlSchema: TemplateSchema = {
 // ============================================
 
 const heroSource = `<script>
-  let { headline, subheadline, cta, secondaryCta, location, backgroundImage } = $props();
+  let { context = {}, props = {} } = $props();
+  const { headline, subheadline, cta, secondaryCta, location, backgroundImage } = props;
 </script>
 
 <section class="relative min-h-[90vh] overflow-hidden">
@@ -236,7 +237,8 @@ const heroSource = `<script>
 </section>`;
 
 const servicesGridSource = `<script>
-  let { headline, subheadline, services = [], featureImage } = $props();
+  let { context = {}, props = {} } = $props();
+  const { headline, subheadline, services = [], featureImage } = props;
 
   const iconMap = {
     video: '<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m16 13 5.223 3.482a.5.5 0 0 0 .777-.416V7.87a.5.5 0 0 0-.752-.432L16 10.5"/><rect x="2" y="6" width="14" height="12" rx="2"/></svg>',
@@ -282,7 +284,8 @@ const servicesGridSource = `<script>
 </section>`;
 
 const aboutSnippetSource = `<script>
-  let { headline, content, highlights = [], cta, image, stats = [] } = $props();
+  let { context = {}, props = {} } = $props();
+  const { headline, content, highlights = [], cta, image, stats = [] } = props;
 </script>
 
 <section class="relative overflow-hidden bg-muted/30 py-16 md:py-24">
@@ -336,7 +339,8 @@ const aboutSnippetSource = `<script>
 </section>`;
 
 const testimonialCarouselSource = `<script>
-  let { headline, testimonials = [] } = $props();
+  let { context = {}, props = {} } = $props();
+  const { headline, testimonials = [] } = props;
 </script>
 
 <section class="bg-muted/30 py-16 md:py-24">
@@ -370,7 +374,8 @@ const testimonialCarouselSource = `<script>
 </section>`;
 
 const ctaBannerSource = `<script>
-  let { headline, subheadline, cta, secondaryCta, backgroundImage, showInstructors, instructors = [] } = $props();
+  let { context = {}, props = {} } = $props();
+  const { headline, subheadline, cta, secondaryCta, backgroundImage, showInstructors, instructors = [] } = props;
 </script>
 
 <section class="relative overflow-hidden py-16 md:py-24">
@@ -425,7 +430,8 @@ const ctaBannerSource = `<script>
 </section>`;
 
 const instructorGridSource = `<script>
-  let { heading, subheading, instructors = [], cta } = $props();
+  let { context = {}, props = {} } = $props();
+  const { heading, subheading, instructors = [], cta } = props;
 </script>
 
 <section class="py-16 md:py-24">
@@ -468,7 +474,8 @@ const instructorGridSource = `<script>
 </section>`;
 
 const valuesGridSource = `<script>
-  let { heading, values = [] } = $props();
+  let { context = {}, props = {} } = $props();
+  const { heading, values = [] } = props;
 </script>
 
 <section class="py-16 md:py-24">
@@ -489,7 +496,8 @@ const valuesGridSource = `<script>
 </section>`;
 
 const storySource = `<script>
-  let { heading, subheading, content = [], image } = $props();
+  let { context = {}, props = {} } = $props();
+  const { heading, subheading, content = [], image } = props;
 </script>
 
 <section class="py-16 md:py-24">
@@ -518,7 +526,8 @@ const storySource = `<script>
 </section>`;
 
 const htmlSource = `<script>
-  let { html, css } = $props();
+  let { context = {}, props = {} } = $props();
+  const { html, css } = props;
 </script>
 
 {#if css}
@@ -753,7 +762,8 @@ const sidebarWidgetSchema: TemplateSchema = {
 // ============================================
 
 const siteHeaderSource = `<script>
-  let { logo_url, brand_name, nav_links = [], cta } = $props();
+  let { context = {}, props = {} } = $props();
+  const { logo_url, brand_name, nav_links = [], cta } = props;
 </script>
 
 <header class="sticky top-0 z-50 w-full border-b border-border bg-background/80 backdrop-blur-md">
@@ -785,7 +795,8 @@ const siteHeaderSource = `<script>
 </header>`;
 
 const siteFooterSource = `<script>
-  let { brand_name, tagline, quick_links = [], contact = {}, copyright_text } = $props();
+  let { context = {}, props = {} } = $props();
+  const { brand_name, tagline, quick_links = [], contact = {}, copyright_text } = props;
 </script>
 
 <footer class="bg-brand-burgundy py-12">
@@ -843,7 +854,8 @@ const siteFooterSource = `<script>
 </footer>`;
 
 const announcementBarSource = `<script>
-  let { message, link, bg_color = '#7c3545', dismissible = false } = $props();
+  let { context = {}, props = {} } = $props();
+  const { message, link, bg_color = '#7c3545', dismissible = false } = props;
   let dismissed = $state(false);
 </script>
 
@@ -862,7 +874,8 @@ const announcementBarSource = `<script>
 {/if}`;
 
 const sidebarWidgetSource = `<script>
-  let { title, content, cta, style = 'card' } = $props();
+  let { context = {}, props = {} } = $props();
+  const { title, content, cta, style = 'card' } = props;
 </script>
 
 <aside class="{style === 'card' ? 'rounded-lg border bg-card p-6 shadow-sm' : 'py-4'}">
