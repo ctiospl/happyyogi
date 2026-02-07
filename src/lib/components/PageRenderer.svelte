@@ -60,7 +60,7 @@
 
 				svelteClient.hydrate(ClientComponent, {
 					target,
-					props: { context: {}, props: block.hydrationProps ?? {} }
+					props: block.hydrationProps ?? {}
 				});
 			} catch (err) {
 				console.warn(`Hydration failed for block ${block.id}:`, err);

@@ -63,7 +63,7 @@ export async function resolvePageBlocks(blocks: PageBlock[]): Promise<ResolveRes
 		if (template.compiled_js) {
 			const result = await renderInSandbox(
 				template.compiled_js,
-				{ context: {}, props: block.props }
+				block.props
 			);
 
 			if (!result.error) {

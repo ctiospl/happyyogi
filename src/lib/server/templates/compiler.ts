@@ -262,7 +262,7 @@ export async function compileTemplateDual(
  * Wrap raw template content in a Svelte component structure
  * if it doesn't already have one.
  *
- * Injects `let { context, props } = $props()` for namespaced access.
+ * Injects flat `$props()` destructuring from schema fields.
  */
 export function normalizeTemplate(source: string, schema?: { fields: { key: string }[] }): string {
 	// If source already has a script tag, return as-is
@@ -270,9 +270,12 @@ export function normalizeTemplate(source: string, schema?: { fields: { key: stri
 		return source;
 	}
 
-	// Always inject context + props (namespaced)
+	// Build flat props destructuring from schema fields
+	const fields = schema?.fields?.map(f => f.key) ?? [];
+	const destructure = fields.length > 0 ? `{ ${fields.join(', ')} }` : '$$props';
+
 	return `<script>
-let { context = {}, props = {} } = $props();
+let ${destructure} = $props();
 </script>
 
 ${source}`;
