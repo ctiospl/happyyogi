@@ -351,6 +351,7 @@ export interface TemplatesTable {
 	compiled_js: string | null;
 	compiled_css: string | null;
 	compile_error: string | null;
+	compiled_client_js: string | null;
 
 	// Schema defines editable props
 	schema: Json<TemplateSchema>;

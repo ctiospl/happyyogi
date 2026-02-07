@@ -96,6 +96,7 @@ export async function createTemplate(
 ): Promise<Template> {
 	// Compile + bundle the source code if provided
 	let compiledJs: string | null = null;
+	let compiledClientJs: string | null = null;
 	let compiledCss: string | null = null;
 	let compileError: string | null = null;
 
@@ -105,6 +106,7 @@ export async function createTemplate(
 
 		if (result.ssrBundle) {
 			compiledJs = result.ssrBundle;
+			compiledClientJs = result.clientBundle ?? null;
 			compiledCss = result.css ?? null;
 		} else {
 			compileError = result.error ?? null;
@@ -121,6 +123,7 @@ export async function createTemplate(
 			category: data.category,
 			source_code: data.source_code,
 			compiled_js: compiledJs,
+			compiled_client_js: compiledClientJs,
 			compiled_css: compiledCss,
 			compile_error: compileError,
 			schema: data.schema ?? { fields: [] },
@@ -148,6 +151,7 @@ export async function updateTemplate(
 	if (existing?.is_core) throw new Error('Core templates cannot be modified');
 	// If source code changed, recompile
 	let compiledJs: string | null | undefined;
+	let compiledClientJs: string | null | undefined;
 	let compiledCss: string | null | undefined;
 	let compileError: string | null | undefined;
 
@@ -157,11 +161,13 @@ export async function updateTemplate(
 
 		if (result.ssrBundle) {
 			compiledJs = result.ssrBundle;
+			compiledClientJs = result.clientBundle ?? null;
 			compiledCss = result.css ?? null;
 			compileError = null;
 		} else {
 			compileError = result.error ?? null;
 			compiledJs = null;
+			compiledClientJs = null;
 			compiledCss = null;
 		}
 	}
@@ -172,6 +178,7 @@ export async function updateTemplate(
 	};
 
 	if (compiledJs !== undefined) updateData.compiled_js = compiledJs;
+	if (compiledClientJs !== undefined) updateData.compiled_client_js = compiledClientJs;
 	if (compiledCss !== undefined) updateData.compiled_css = compiledCss;
 	if (compileError !== undefined) updateData.compile_error = compileError;
 
@@ -225,6 +232,7 @@ export async function publishTemplate(id: string): Promise<Template | null> {
 			source_code: sourceToPublish,
 			draft_source_code: null,
 			compiled_js: compiled.ssrBundle ?? null,
+			compiled_client_js: compiled.clientBundle ?? null,
 			compiled_css: compiled.css ?? null,
 			compile_error: compiled.error ?? null,
 			updated_at: new Date()

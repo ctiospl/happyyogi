@@ -284,6 +284,7 @@ ${source}`;
 
 export interface CompileAndBundleResult {
 	ssrBundle?: string;
+	clientBundle?: string;
 	css?: string;
 	error?: string;
 	warnings?: Warning[];
@@ -297,7 +298,7 @@ export async function compileAndBundle(
 	source: string,
 	schema?: { fields: { key: string }[] }
 ): Promise<CompileAndBundleResult> {
-	const { bundleSSR } = await import('./bundler');
+	const { bundleSSR, bundleClientTemplate } = await import('./bundler');
 
 	// 1. Normalize (inject context/props if no script tag)
 	const normalized = normalizeTemplate(source, schema);
@@ -308,28 +309,39 @@ export async function compileAndBundle(
 		return { error: validation.errors.join('\n'), warnings: [] };
 	}
 
-	// 3. Compile with Svelte compiler (server mode)
-	const compiled = await compileTemplate(normalized, {
+	// 3. Dual compile: server + client
+	const dual = await compileTemplateDual(normalized, {
 		filename: 'Template.svelte',
 		name: 'Template'
 	});
 
-	if (!compiled.success || !compiled.js) {
-		return { error: compiled.error || 'Compilation failed', warnings: compiled.warnings };
+	if (!dual.server.success || !dual.server.js) {
+		return { error: dual.server.error || 'Compilation failed', warnings: dual.server.warnings };
 	}
 
-	// 4. Bundle with esbuild (resolves imports, creates self-contained IIFE)
+	// 4. Bundle SSR + client
 	try {
-		const ssrBundle = await bundleSSR(compiled.js);
+		const ssrBundle = await bundleSSR(dual.server.js);
+
+		let clientBundle: string | undefined;
+		if (dual.client.success && dual.client.js) {
+			try {
+				clientBundle = await bundleClientTemplate(dual.client.js);
+			} catch {
+				// Client bundle failure is non-fatal; SSR still works
+			}
+		}
+
 		return {
 			ssrBundle,
-			css: compiled.css,
-			warnings: compiled.warnings
+			clientBundle,
+			css: dual.server.css,
+			warnings: [...(dual.server.warnings ?? []), ...(dual.client.warnings ?? [])]
 		};
 	} catch (err) {
 		return {
 			error: `Bundle failed: ${err instanceof Error ? err.message : String(err)}`,
-			warnings: compiled.warnings
+			warnings: dual.server.warnings
 		};
 	}
 }
