@@ -11,7 +11,6 @@
 
 	let { html = '', css = '', error = null, class: className = '' }: Props = $props();
 
-	let iframe: HTMLIFrameElement;
 	let siteCSS = '';
 
 	type DeviceSize = 'desktop' | 'tablet' | 'mobile';
@@ -29,18 +28,7 @@
 		siteCSS = generateSiteCSS();
 	});
 
-	$effect(() => {
-		if (iframe && !error) {
-			updateIframeContent();
-		}
-	});
-
-	function updateIframeContent() {
-		const doc = iframe.contentDocument;
-		if (!doc) return;
-
-		const fullHtml = `
-<!DOCTYPE html>
+	const srcdoc = $derived(`<!DOCTYPE html>
 <html>
 <head>
 	<meta charset="utf-8">
@@ -56,12 +44,7 @@
 <body>
 	${html}
 </body>
-</html>`;
-
-		doc.open();
-		doc.write(fullHtml);
-		doc.close();
-	}
+</html>`);
 </script>
 
 <div class="preview-frame {className}">
@@ -90,8 +73,9 @@
 	{:else}
 		<div class="iframe-wrapper">
 			<iframe
-				bind:this={iframe}
 				title="Template Preview"
+				sandbox="allow-scripts"
+				{srcdoc}
 				class="preview-iframe"
 				style:width={activeWidth}
 			></iframe>

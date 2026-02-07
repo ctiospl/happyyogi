@@ -7,6 +7,7 @@ import {
 	deleteLayout
 } from '$lib/server/layouts';
 import { getTenantTemplates } from '$lib/server/templates/crud';
+import { validateBlocks } from '$lib/server/templates/validate-blocks';
 import { invalidateLayoutCache } from '$lib/server/layouts/resolve';
 import { error, fail, redirect } from '@sveltejs/kit';
 
@@ -35,6 +36,12 @@ export const actions: Actions = {
 
 		try {
 			const regions = regionsJson ? JSON.parse(regionsJson) : {};
+			const templates = await getTenantTemplates(locals.tenant.id);
+			const allBlocks = Object.values(regions).flat() as any[];
+			const validation = validateBlocks(allBlocks, templates);
+			if (!validation.ok) {
+				return fail(400, { error: validation.error ?? 'Invalid blocks' });
+			}
 			await updateLayout(params.id, {
 				regions: JSON.stringify(regions) as any
 			});

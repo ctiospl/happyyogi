@@ -1013,6 +1013,12 @@ export async function seedCoreTemplates(tenantId: string): Promise<SeedResult> {
 		if (existingTemplate) {
 			result.templateMap.set(def.slug, existingTemplate.id);
 
+			// Skip updates to existing core templates
+			if (existingTemplate.is_core) {
+				result.skipped.push(def.slug);
+				continue;
+			}
+
 			// Update sample_data and source_code if they differ
 			const existingSample = existingTemplate.sample_data as Record<string, unknown> | null;
 			const sampleChanged = JSON.stringify(existingSample) !== JSON.stringify(newSampleData);
@@ -1047,6 +1053,7 @@ export async function seedCoreTemplates(tenantId: string): Promise<SeedResult> {
 				source_code: def.source_code,
 				schema: def.schema,
 				sample_data: newSampleData,
+				is_core: true,
 				updated_at: new Date()
 			});
 			result.created.push(def.slug);
@@ -1102,6 +1109,12 @@ export async function seedLayoutTemplates(tenantId: string): Promise<SeedResult>
 		if (existingTemplate) {
 			result.templateMap.set(def.slug, existingTemplate.id);
 
+			// Skip updates to existing core templates
+			if (existingTemplate.is_core) {
+				result.skipped.push(def.slug);
+				continue;
+			}
+
 			const existingSample = existingTemplate.sample_data as Record<string, unknown> | null;
 			const sampleChanged = JSON.stringify(existingSample) !== JSON.stringify(newSampleData);
 			const sourceChanged = existingTemplate.source_code !== def.source_code;
@@ -1135,6 +1148,7 @@ export async function seedLayoutTemplates(tenantId: string): Promise<SeedResult>
 				source_code: def.source_code,
 				schema: def.schema,
 				sample_data: newSampleData,
+				is_core: true,
 				updated_at: new Date()
 			});
 			result.created.push(def.slug);

@@ -120,32 +120,34 @@
 				<span class="text-sm text-red-600">Error</span>
 			{/if}
 
-			<form
-				method="POST"
-				action="?/publish"
-				use:enhance={() => {
-					saveStatus = 'publishing';
-					return async ({ result, update }) => {
-						if (result.type === 'success') {
-							saveStatus = 'published';
-							setTimeout(() => { saveStatus = 'idle'; }, 2000);
-						} else {
-							saveStatus = 'error';
-						}
-						await update();
-					};
-				}}
-			>
-				<Button type="submit" variant="default" size="sm" disabled={saveStatus === 'publishing'}>
-					<Upload class="mr-1 h-4 w-4" />
-					Publish
-				</Button>
-			</form>
+			{#if !data.template.is_core}
+				<form
+					method="POST"
+					action="?/publish"
+					use:enhance={() => {
+						saveStatus = 'publishing';
+						return async ({ result, update }) => {
+							if (result.type === 'success') {
+								saveStatus = 'published';
+								setTimeout(() => { saveStatus = 'idle'; }, 2000);
+							} else {
+								saveStatus = 'error';
+							}
+							await update();
+						};
+					}}
+				>
+					<Button type="submit" variant="default" size="sm" disabled={saveStatus === 'publishing'}>
+						<Upload class="mr-1 h-4 w-4" />
+						Publish
+					</Button>
+				</form>
 
-			<Button variant="outline" size="sm" onclick={() => (settingsDialogOpen = true)}>
-				<Settings class="mr-1 h-4 w-4" />
-				Settings
-			</Button>
+				<Button variant="outline" size="sm" onclick={() => (settingsDialogOpen = true)}>
+					<Settings class="mr-1 h-4 w-4" />
+					Settings
+				</Button>
+			{/if}
 			{#if !data.template.is_core}
 				<Button
 					variant="outline"
@@ -166,11 +168,20 @@
 		</div>
 	{/if}
 
+	{#if data.template.is_core}
+		<div class="core-banner">
+			<span>Core Template — Read Only</span>
+			<form method="POST" action="?/fork">
+				<button type="submit" class="customize-btn">Customize</button>
+			</form>
+		</div>
+	{/if}
+
 	<!-- Editor (uses draft source if available) -->
-	<div class="flex-1 overflow-hidden">
+	<div class="flex-1 overflow-hidden {data.template.is_core ? 'pointer-events-none opacity-60' : ''}">
 		<TemplateEditor
 			template={editorTemplate}
-			onsave={handleSave}
+			onsave={data.template.is_core ? undefined : handleSave}
 			onpreview={handlePreview}
 		/>
 	</div>
@@ -234,3 +245,32 @@
 		</Dialog.Footer>
 	</Dialog.Content>
 </Dialog.Root>
+
+<style>
+	.core-banner {
+		display: flex;
+		align-items: center;
+		justify-content: space-between;
+		padding: 12px 16px;
+		background: #fef3c7;
+		border: 1px solid #f59e0b;
+		border-radius: 8px;
+		margin: 8px 16px;
+		font-size: 14px;
+		font-weight: 500;
+		color: #92400e;
+	}
+	.customize-btn {
+		padding: 6px 16px;
+		background: #f59e0b;
+		color: white;
+		border: none;
+		border-radius: 6px;
+		cursor: pointer;
+		font-size: 13px;
+		font-weight: 500;
+	}
+	.customize-btn:hover {
+		background: #d97706;
+	}
+</style>

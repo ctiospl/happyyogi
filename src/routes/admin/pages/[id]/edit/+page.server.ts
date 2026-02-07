@@ -1,6 +1,7 @@
 import type { PageServerLoad, Actions } from './$types';
 import { getPageById, updatePage, publishPage, unpublishPage, deletePage } from '$lib/server/pages';
 import { getTenantTemplates } from '$lib/server/templates/crud';
+import { validateBlocks } from '$lib/server/templates/validate-blocks';
 import { getLayouts } from '$lib/server/layouts';
 import { getForms } from '$lib/server/forms';
 import { error, fail, redirect } from '@sveltejs/kit';
@@ -71,6 +72,11 @@ export const actions: Actions = {
 
 		try {
 			const blocks = blocksJson ? JSON.parse(blocksJson) : [];
+			const templates = await getTenantTemplates(locals.tenant.id);
+			const validation = validateBlocks(blocks, templates);
+			if (!validation.ok) {
+				return fail(400, { error: validation.error ?? 'Invalid blocks' });
+			}
 			await updatePage(params.id, {
 				blocks: JSON.stringify(blocks) as any
 			});
