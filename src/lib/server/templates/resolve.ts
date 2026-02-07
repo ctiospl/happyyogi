@@ -63,7 +63,7 @@ export async function resolvePageBlocks(blocks: PageBlock[]): Promise<ResolveRes
 		if (template.compiled_js) {
 			const result = await renderInSandbox(
 				template.compiled_js,
-				{ context: {}, props: block.props }
+				block.props
 			);
 
 			if (!result.error) {
@@ -73,7 +73,9 @@ export async function resolvePageBlocks(blocks: PageBlock[]): Promise<ResolveRes
 					order: i,
 					html: sanitizeRenderedHtml(result.html),
 					css: result.css || undefined,
-					templateId: template.id
+					templateId: template.id,
+					clientJs: template.compiled_client_js || undefined,
+					hydrationProps: block.props
 				} as ContentBlock);
 
 				if (result.css) cssParts.push(result.css);

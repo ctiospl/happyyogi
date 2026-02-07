@@ -96,6 +96,7 @@ export async function createTemplate(
 ): Promise<Template> {
 	// Compile + bundle the source code if provided
 	let compiledJs: string | null = null;
+	let compiledClientJs: string | null = null;
 	let compiledCss: string | null = null;
 	let compileError: string | null = null;
 
@@ -105,6 +106,7 @@ export async function createTemplate(
 
 		if (result.ssrBundle) {
 			compiledJs = result.ssrBundle;
+			compiledClientJs = result.clientBundle ?? null;
 			compiledCss = result.css ?? null;
 		} else {
 			compileError = result.error ?? null;
@@ -121,6 +123,7 @@ export async function createTemplate(
 			category: data.category,
 			source_code: data.source_code,
 			compiled_js: compiledJs,
+			compiled_client_js: compiledClientJs,
 			compiled_css: compiledCss,
 			compile_error: compileError,
 			schema: data.schema ?? { fields: [] },
@@ -138,14 +141,17 @@ export async function createTemplate(
 // ============================================
 
 /**
- * Update a template
+ * Update a template (core templates cannot be modified)
  */
 export async function updateTemplate(
 	id: string,
 	data: Partial<Omit<TemplateUpdate, 'id' | 'created_at'>>
 ): Promise<Template | null> {
+	const existing = await getTemplateById(id);
+	if (existing?.is_core) throw new Error('Core templates cannot be modified');
 	// If source code changed, recompile
 	let compiledJs: string | null | undefined;
+	let compiledClientJs: string | null | undefined;
 	let compiledCss: string | null | undefined;
 	let compileError: string | null | undefined;
 
@@ -155,11 +161,13 @@ export async function updateTemplate(
 
 		if (result.ssrBundle) {
 			compiledJs = result.ssrBundle;
+			compiledClientJs = result.clientBundle ?? null;
 			compiledCss = result.css ?? null;
 			compileError = null;
 		} else {
 			compileError = result.error ?? null;
 			compiledJs = null;
+			compiledClientJs = null;
 			compiledCss = null;
 		}
 	}
@@ -170,6 +178,7 @@ export async function updateTemplate(
 	};
 
 	if (compiledJs !== undefined) updateData.compiled_js = compiledJs;
+	if (compiledClientJs !== undefined) updateData.compiled_client_js = compiledClientJs;
 	if (compiledCss !== undefined) updateData.compiled_css = compiledCss;
 	if (compileError !== undefined) updateData.compile_error = compileError;
 
@@ -191,6 +200,9 @@ export async function updateTemplate(
  * Save draft source code (does not affect published version)
  */
 export async function saveDraft(id: string, draftSource: string): Promise<Template | null> {
+	const existing = await getTemplateById(id);
+	if (existing?.is_core) throw new Error('Core templates cannot be modified');
+
 	const result = await db
 		.updateTable('templates')
 		.set({ draft_source_code: draftSource, updated_at: new Date() })
@@ -202,10 +214,12 @@ export async function saveDraft(id: string, draftSource: string): Promise<Templa
 
 /**
  * Publish template: compile draft, copy to source_code, clear draft
+ * Core templates cannot be published.
  */
 export async function publishTemplate(id: string): Promise<Template | null> {
 	const template = await getTemplateById(id);
 	if (!template) return null;
+	if (template.is_core) throw new Error('Core templates cannot be modified');
 
 	const sourceToPublish = template.draft_source_code || template.source_code;
 	const schema = typeof template.schema === 'string' ? JSON.parse(template.schema) : template.schema;
@@ -218,6 +232,7 @@ export async function publishTemplate(id: string): Promise<Template | null> {
 			source_code: sourceToPublish,
 			draft_source_code: null,
 			compiled_js: compiled.ssrBundle ?? null,
+			compiled_client_js: compiled.clientBundle ?? null,
 			compiled_css: compiled.css ?? null,
 			compile_error: compiled.error ?? null,
 			updated_at: new Date()
@@ -234,10 +249,53 @@ export async function publishTemplate(id: string): Promise<Template | null> {
 // ============================================
 
 /**
- * Delete a template
+ * Delete a template (core templates cannot be deleted)
  */
 export async function deleteTemplate(id: string): Promise<void> {
+	const existing = await getTemplateById(id);
+	if (existing?.is_core) throw new Error('Core templates cannot be deleted');
 	await db.deleteFrom('templates').where('id', '=', id).execute();
+}
+
+/**
+ * Fork a template — create a tenant-owned copy of a (usually core) template
+ */
+export async function forkTemplate(templateId: string, tenantId: string): Promise<string> {
+	const original = await getTemplateById(templateId);
+	if (!original) throw new Error('Template not found');
+
+	const slug = `${original.slug}-custom`;
+
+	// Check if custom slug already exists for this tenant
+	const existing = await db
+		.selectFrom('templates')
+		.select('id')
+		.where('tenant_id', '=', tenantId)
+		.where('slug', '=', slug)
+		.executeTakeFirst();
+
+	const finalSlug = existing ? `${slug}-${Date.now()}` : slug;
+
+	const forked = await db
+		.insertInto('templates')
+		.values({
+			tenant_id: tenantId,
+			slug: finalSlug,
+			name: `${original.name} (Custom)`,
+			description: original.description,
+			category: original.category,
+			source_code: original.source_code,
+			compiled_js: original.compiled_js,
+			compiled_css: original.compiled_css,
+			compile_error: original.compile_error,
+			schema: original.schema,
+			sample_data: original.sample_data,
+			updated_at: new Date()
+		})
+		.returning('id')
+		.executeTakeFirstOrThrow();
+
+	return forked.id;
 }
 
 // ============================================

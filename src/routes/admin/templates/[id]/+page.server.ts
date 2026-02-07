@@ -1,5 +1,5 @@
 import type { PageServerLoad, Actions } from './$types';
-import { getTemplateById, updateTemplate, deleteTemplate, saveDraft, publishTemplate } from '$lib/server/templates/crud';
+import { getTemplateById, updateTemplate, deleteTemplate, saveDraft, publishTemplate, forkTemplate } from '$lib/server/templates/crud';
 import { error, fail, redirect } from '@sveltejs/kit';
 import type { TemplateSchema } from '$lib/server/db/schema';
 
@@ -148,5 +148,22 @@ export const actions: Actions = {
 		await deleteTemplate(params.id);
 
 		throw redirect(302, '/admin/templates');
+	},
+
+	fork: async ({ params, locals }) => {
+		if (!locals.tenant || locals.tenantLink?.role !== 'admin') {
+			return fail(403, { error: 'Not authorized' });
+		}
+
+		const template = await getTemplateById(params.id);
+		if (!template) {
+			return fail(404, { error: 'Template not found' });
+		}
+		if (template.tenant_id && template.tenant_id !== locals.tenant.id) {
+			return fail(403, { error: 'Access denied' });
+		}
+
+		const newId = await forkTemplate(params.id, locals.tenant.id);
+		throw redirect(302, `/admin/templates/${newId}`);
 	}
 };

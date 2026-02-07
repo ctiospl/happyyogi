@@ -130,6 +130,10 @@ export interface HtmlBlock extends BaseBlock {
 	html: string;
 	css?: string;
 	templateId?: string; // source template ID (for hydration)
+	/** Bundled client JS for hydration (IIFE referencing shared runtime) */
+	clientJs?: string;
+	/** Original props to pass during client hydration */
+	hydrationProps?: Record<string, unknown>;
 }
 
 // Inline form block

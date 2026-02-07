@@ -17,6 +17,16 @@
 	type DndField = TemplateSchemaField & { id: string };
 	let fields = $state<DndField[]>(schema.fields.map(f => ({ ...f, id: f.key })));
 
+	const duplicateKeys = $derived.by(() => {
+		const seen = new Set<string>();
+		const dupes = new Set<string>();
+		for (const f of fields) {
+			if (seen.has(f.key)) dupes.add(f.key);
+			seen.add(f.key);
+		}
+		return dupes;
+	});
+
 	function addField() {
 		const key = `field_${fields.length + 1}`;
 		const newField: DndField = {
@@ -49,6 +59,7 @@
 	}
 
 	function emitChange() {
+		if (duplicateKeys.size > 0) return; // don't emit invalid schema
 		// Strip DnD `id` property before emitting
 		const clean = fields.map(({ id, ...rest }) => rest);
 		onchange?.({ fields: clean });
@@ -83,6 +94,9 @@
 						onchange={(f) => updateField(index, f)}
 						ondelete={() => deleteField(index)}
 					/>
+					{#if duplicateKeys.has(field.key)}
+						<p class="duplicate-warning">Duplicate key: {field.key}</p>
+					{/if}
 				</div>
 			{/each}
 		</div>
@@ -128,5 +142,11 @@
 		display: flex;
 		flex-direction: column;
 		gap: 8px;
+	}
+
+	.duplicate-warning {
+		color: #dc2626;
+		font-size: 12px;
+		margin: 2px 0 0 8px;
 	}
 </style>

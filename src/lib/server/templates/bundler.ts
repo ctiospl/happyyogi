@@ -1,9 +1,13 @@
 /**
- * esbuild bundler for Svelte SSR templates
+ * esbuild bundler for Svelte SSR + client templates
  *
- * Bundles:
+ * Server-side bundles:
  * 1. Shared Svelte runtime (svelte/server + svelte/internal/server) → cached IIFE
  * 2. Per-template SSR code → IIFE referencing shared runtime via globalThis.__svelte
+ *
+ * Client-side bundles:
+ * 3. Shared Svelte client runtime (svelte + svelte/internal/client) → cached IIFE
+ * 4. Per-template client code → IIFE referencing shared client runtime via globalThis.__svelte_client
  */
 
 import * as esbuild from 'esbuild';
@@ -166,7 +170,130 @@ function externalSvelteInternalPlugin(): esbuild.Plugin {
 	};
 }
 
+// ---------------------------------------------------------------------------
+// Client-side bundling
+// ---------------------------------------------------------------------------
+
+// Cached shared client runtime (bundled once at startup)
+let sharedClientRuntimeCache: string | null = null;
+
+/**
+ * Bundle svelte + svelte/internal/client into a single IIFE on window.__svelte_client.
+ * Contains mount(), hydrate(), unmount() and all client helpers.
+ * Served to browsers, loaded once per page.
+ */
+export async function buildSharedClientRuntime(): Promise<string> {
+	if (sharedClientRuntimeCache) return sharedClientRuntimeCache;
+
+	const tmpDir = resolve(tmpdir(), 'happyyogi-bundler');
+	mkdirSync(tmpDir, { recursive: true });
+	const entryPath = resolve(tmpDir, `client-runtime-entry-${randomUUID()}.js`);
+	writeFileSync(
+		entryPath,
+		`export { mount, hydrate, unmount } from 'svelte';
+export * from 'svelte/internal/client';
+`
+	);
+
+	try {
+		const result = await esbuild.build({
+			entryPoints: [entryPath],
+			bundle: true,
+			write: false,
+			format: 'iife',
+			globalName: '__svelte_client',
+			platform: 'browser',
+			target: 'es2020',
+			minify: true,
+			absWorkingDir: PROJECT_ROOT,
+			nodePaths: [resolve(PROJECT_ROOT, 'node_modules')]
+		});
+
+		sharedClientRuntimeCache = result.outputFiles![0].text;
+		return sharedClientRuntimeCache;
+	} finally {
+		try {
+			unlinkSync(entryPath);
+		} catch {
+			// ignore cleanup errors
+		}
+	}
+}
+
+/**
+ * Bundle compiled Svelte client component JS into a browser IIFE.
+ * Svelte internals are externalized to window.__svelte_client.
+ * Resolves $lib/* paths via custom plugin.
+ */
+export async function bundleClientTemplate(compiledClientJs: string): Promise<string> {
+	const tmpDir = resolve(tmpdir(), 'happyyogi-bundler');
+	mkdirSync(tmpDir, { recursive: true });
+	const entryPath = resolve(tmpDir, `client-${randomUUID()}.js`);
+	writeFileSync(entryPath, compiledClientJs);
+
+	try {
+		const result = await esbuild.build({
+			entryPoints: [entryPath],
+			bundle: true,
+			write: false,
+			format: 'iife',
+			globalName: '__component_client',
+			platform: 'browser',
+			target: 'es2020',
+			minify: true,
+			absWorkingDir: PROJECT_ROOT,
+			nodePaths: [resolve(PROJECT_ROOT, 'node_modules')],
+			plugins: [
+				resolveLibPlugin(),
+				externalSvelteClientPlugin()
+			]
+		});
+
+		return result.outputFiles![0].text;
+	} finally {
+		try {
+			unlinkSync(entryPath);
+		} catch {
+			// ignore
+		}
+	}
+}
+
+/**
+ * Map svelte client imports to globalThis.__svelte_client
+ * so the per-template bundle stays small.
+ */
+function externalSvelteClientPlugin(): esbuild.Plugin {
+	return {
+		name: 'external-svelte-client',
+		setup(build) {
+			// Externalize svelte/internal/client → window.__svelte_client
+			build.onResolve({ filter: /^svelte\/internal\/client/ }, () => ({
+				path: 'svelte/internal/client',
+				namespace: 'svelte-client-external'
+			}));
+			build.onLoad({ filter: /.*/, namespace: 'svelte-client-external' }, () => ({
+				contents: 'module.exports = globalThis.__svelte_client;',
+				loader: 'js'
+			}));
+
+			// Externalize bare svelte → window.__svelte_client (mount, hydrate, unmount)
+			build.onResolve({ filter: /^svelte$/ }, () => ({
+				path: 'svelte',
+				namespace: 'svelte-client-external'
+			}));
+
+			// Externalize svelte/internal/disclose-version
+			build.onResolve({ filter: /^svelte\/internal\/disclose-version/ }, () => ({
+				path: 'svelte/internal/disclose-version',
+				namespace: 'svelte-client-external'
+			}));
+		}
+	};
+}
+
 /** Clear cached shared runtime (e.g. after svelte package update) */
 export function clearRuntimeCache(): void {
 	sharedRuntimeCache = null;
+	sharedClientRuntimeCache = null;
 }
