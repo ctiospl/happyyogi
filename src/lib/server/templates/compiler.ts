@@ -46,7 +46,10 @@ const ALLOWED_IMPORT_PATTERNS = [
 	/^lucide-svelte/,
 
 	// Svelte internals (needed for compiled output)
-	/^svelte/
+	/^svelte/,
+
+	// Template composition: import other templates by slug
+	/^\$template\//
 ];
 
 /**
@@ -282,6 +285,60 @@ ${source}`;
 }
 
 // ============================================
+// DEPENDENCY EXTRACTION & CYCLE DETECTION
+// ============================================
+
+/**
+ * Extract template slugs from $template/* imports in source code.
+ * Handles default, named, namespace, and mixed import styles.
+ * e.g. `import Card from '$template/testimonial-card'` → ['testimonial-card']
+ */
+export function extractTemplateDependencies(source: string): string[] {
+	const regex = /import\s+(?:(?:\{[^}]*\}|\*\s+as\s+\w+|\w+)(?:\s*,\s*\{[^}]*\})?\s+from\s+)?['"]\$template\/([^'"]+)['"]/g;
+	const slugs: string[] = [];
+	let match;
+	while ((match = regex.exec(source)) !== null) {
+		if (!slugs.includes(match[1])) slugs.push(match[1]);
+	}
+	return slugs;
+}
+
+/**
+ * Detect circular dependencies using DFS with depth limit.
+ * Returns the cycle path if found, null if clean.
+ *
+ * @param slug - template being checked
+ * @param newDeps - its direct dependencies (slugs)
+ * @param lookupDeps - async fn returning dependencies for a given slug
+ * @param maxDepth - max nesting depth (default 5)
+ */
+export async function detectCircularDependencies(
+	slug: string,
+	newDeps: string[],
+	lookupDeps: (slug: string) => Promise<string[]>,
+	maxDepth = 5
+): Promise<string[] | null> {
+	async function dfs(current: string, path: string[], depth: number): Promise<string[] | null> {
+		if (path.includes(current)) {
+			return [...path, current];
+		}
+		if (depth > maxDepth) {
+			return [...path, current, `... (depth exceeds ${maxDepth} levels)`];
+		}
+
+		const nextPath = [...path, current];
+		const deps = current === slug ? newDeps : await lookupDeps(current);
+		for (const dep of deps) {
+			const cycle = await dfs(dep, nextPath, depth + 1);
+			if (cycle) return cycle;
+		}
+		return null;
+	}
+
+	return dfs(slug, [], 0);
+}
+
+// ============================================
 // COMPILE AND BUNDLE PIPELINE
 // ============================================
 
@@ -293,13 +350,19 @@ export interface CompileAndBundleResult {
 	warnings?: Warning[];
 }
 
+/** Lookup function: given a slug, return its source code (or null if not found) */
+export type LookupSource = (slug: string) => Promise<string | null>;
+
 /**
  * Full pipeline: normalize → validate → compile → bundle
  * Returns a self-contained SSR bundle ready for vm execution.
+ *
+ * @param lookupSource - optional resolver for $template/* imports
  */
 export async function compileAndBundle(
 	source: string,
-	schema?: { fields: { key: string }[] }
+	schema?: { fields: { key: string }[] },
+	lookupSource?: LookupSource
 ): Promise<CompileAndBundleResult> {
 	const { bundleSSR, bundleClientTemplate } = await import('./bundler');
 
@@ -324,12 +387,12 @@ export async function compileAndBundle(
 
 	// 4. Bundle SSR + client
 	try {
-		const ssrBundle = await bundleSSR(dual.server.js);
+		const ssrBundle = await bundleSSR(dual.server.js, lookupSource);
 
 		let clientBundle: string | undefined;
 		if (dual.client.success && dual.client.js) {
 			try {
-				clientBundle = await bundleClientTemplate(dual.client.js);
+				clientBundle = await bundleClientTemplate(dual.client.js, lookupSource);
 			} catch {
 				// Client bundle failure is non-fatal; SSR still works
 			}

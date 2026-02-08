@@ -12,11 +12,13 @@
 
 import * as esbuild from 'esbuild';
 import sveltePlugin from 'esbuild-svelte';
+import { compile } from 'svelte/compiler';
 import { fileURLToPath } from 'url';
 import { dirname, resolve } from 'path';
 import { writeFileSync, unlinkSync, mkdirSync } from 'fs';
 import { tmpdir } from 'os';
 import { randomUUID } from 'crypto';
+import type { LookupSource } from './compiler';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -77,12 +79,18 @@ export * from 'svelte/internal/server';
  * Bundle compiled Svelte SSR component JS into a self-contained IIFE.
  * Marks svelte/internal/server as external (provided by shared runtime).
  * Resolves $lib/* paths via custom plugin.
+ *
+ * @param lookupSource - optional resolver for $template/* imports
  */
-export async function bundleSSR(compiledJs: string): Promise<string> {
+export async function bundleSSR(compiledJs: string, lookupSource?: LookupSource): Promise<string> {
 	const tmpDir = resolve(tmpdir(), 'happyyogi-bundler');
 	mkdirSync(tmpDir, { recursive: true });
 	const entryPath = resolve(tmpDir, `ssr-${randomUUID()}.js`);
 	writeFileSync(entryPath, compiledJs);
+
+	const plugins: esbuild.Plugin[] = [];
+	if (lookupSource) plugins.push(templateImportPlugin({ lookupSource, mode: 'server' }));
+	plugins.push(resolveLibPlugin(), svelteServerPlugin(), externalSvelteInternalPlugin());
 
 	try {
 		const result = await esbuild.build({
@@ -97,11 +105,7 @@ export async function bundleSSR(compiledJs: string): Promise<string> {
 			mainFields: ['svelte', 'module', 'main'],
 			absWorkingDir: PROJECT_ROOT,
 			nodePaths: [resolve(PROJECT_ROOT, 'node_modules')],
-			plugins: [
-				resolveLibPlugin(),
-				svelteServerPlugin(),
-				externalSvelteInternalPlugin()
-			]
+			plugins
 		});
 
 		const code = result.outputFiles![0].text;
@@ -125,6 +129,73 @@ function resolveLibPlugin(): esbuild.Plugin {
 			build.onResolve({ filter: /^\$lib\// }, (args) => ({
 				path: args.path.replace(/^\$lib\//, resolve(PROJECT_ROOT, 'src/lib') + '/')
 			}));
+		}
+	};
+}
+
+/**
+ * esbuild plugin: resolve $template/* imports.
+ * Fetches source from DB via lookupSource, normalizes it,
+ * compiles with svelte/compiler, and returns JS.
+ */
+function templateImportPlugin(opts: {
+	lookupSource: LookupSource;
+	mode: 'server' | 'client';
+}): esbuild.Plugin {
+	return {
+		name: 'template-import',
+		setup(build) {
+			build.onResolve({ filter: /^\$template\// }, (args) => ({
+				path: args.path,
+				namespace: 'template-import'
+			}));
+
+			build.onLoad({ filter: /.*/, namespace: 'template-import' }, async (args) => {
+				const slug = args.path.replace(/^\$template\//, '');
+				const source = await opts.lookupSource(slug);
+				if (!source) {
+					return { errors: [{ text: `Template not found: ${slug}` }] };
+				}
+
+				// Normalize (wrap raw HTML in script tag)
+				const { normalizeTemplate, validateTemplate } = await import('./compiler');
+				const normalized = normalizeTemplate(source);
+
+				// Security: validate imported template source
+				const validation = validateTemplate(normalized);
+				if (!validation.valid) {
+					return {
+						errors: [{
+							text: `Template "${slug}" failed validation: ${validation.errors.join(', ')}`
+						}]
+					};
+				}
+
+				// Compile with svelte/compiler
+				const generate = opts.mode === 'server' ? 'server' : 'client';
+				try {
+					const result = compile(normalized, {
+						filename: `${slug}.svelte`,
+						name: slug.replace(/-([a-z])/g, (_, c) => c.toUpperCase()).replace(/^./, s => s.toUpperCase()),
+						generate,
+						dev: false,
+						css: 'injected',
+						runes: true
+					});
+
+					return {
+						contents: result.js.code,
+						loader: 'js',
+						resolveDir: PROJECT_ROOT
+					};
+				} catch (err) {
+					return {
+						errors: [{
+							text: `Failed to compile template "${slug}": ${err instanceof Error ? err.message : String(err)}`
+						}]
+					};
+				}
+			});
 		}
 	};
 }
@@ -224,12 +295,18 @@ export * from 'svelte/internal/client';
  * Bundle compiled Svelte client component JS into a browser IIFE.
  * Svelte internals are externalized to window.__svelte_client.
  * Resolves $lib/* paths via custom plugin.
+ *
+ * @param lookupSource - optional resolver for $template/* imports
  */
-export async function bundleClientTemplate(compiledClientJs: string): Promise<string> {
+export async function bundleClientTemplate(compiledClientJs: string, lookupSource?: LookupSource): Promise<string> {
 	const tmpDir = resolve(tmpdir(), 'happyyogi-bundler');
 	mkdirSync(tmpDir, { recursive: true });
 	const entryPath = resolve(tmpDir, `client-${randomUUID()}.js`);
 	writeFileSync(entryPath, compiledClientJs);
+
+	const plugins: esbuild.Plugin[] = [];
+	if (lookupSource) plugins.push(templateImportPlugin({ lookupSource, mode: 'client' }));
+	plugins.push(resolveLibPlugin(), externalSvelteClientPlugin());
 
 	try {
 		const result = await esbuild.build({
@@ -243,10 +320,7 @@ export async function bundleClientTemplate(compiledClientJs: string): Promise<st
 			minify: true,
 			absWorkingDir: PROJECT_ROOT,
 			nodePaths: [resolve(PROJECT_ROOT, 'node_modules')],
-			plugins: [
-				resolveLibPlugin(),
-				externalSvelteClientPlugin()
-			]
+			plugins
 		});
 
 		return result.outputFiles![0].text;

@@ -16,7 +16,7 @@ export const POST: RequestHandler = async ({ request, locals }) => {
 			throw error(400, 'source_code is required');
 		}
 
-		const result = await compileTemplatePreview(source_code, schema, sample_data);
+		const result = await compileTemplatePreview(source_code, schema, sample_data, locals.tenant?.id);
 
 		return json(result);
 	} catch (err) {

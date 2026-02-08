@@ -3,8 +3,14 @@
  */
 
 import { db } from '$lib/server/db';
+import { sql } from 'kysely';
 import type { Template, NewTemplate, TemplateUpdate, TemplateSchema } from '$lib/server/db/schema';
-import { compileAndBundle } from './compiler';
+import {
+	compileAndBundle,
+	extractTemplateDependencies,
+	detectCircularDependencies,
+	type LookupSource
+} from './compiler';
 import { renderInSandbox } from './sandbox';
 import { parse } from 'svelte/compiler';
 
@@ -85,6 +91,164 @@ export async function getTemplateBySlug(
 }
 
 // ============================================
+// TEMPLATE COMPOSITION HELPERS
+// ============================================
+
+/**
+ * Create a lookupSource closure for template imports.
+ * @param tenantId - tenant scope for slug lookup
+ * @param useDraft - if true, prefer draft_source_code (for preview)
+ */
+export function makeLookupSource(tenantId?: string | null, useDraft = false): LookupSource {
+	return async (slug: string) => {
+		const t = await getTemplateBySlug(slug, tenantId);
+		if (!t) return null;
+		if (useDraft) return t.draft_source_code || t.source_code;
+		return t.source_code;
+	};
+}
+
+/**
+ * Lookup dependencies array for a slug (used by cycle detection).
+ */
+function makeLookupDeps(tenantId?: string | null): (slug: string) => Promise<string[]> {
+	return async (slug: string) => {
+		const t = await getTemplateBySlug(slug, tenantId);
+		if (!t) return [];
+		const deps = typeof t.dependencies === 'string'
+			? JSON.parse(t.dependencies)
+			: t.dependencies;
+		return Array.isArray(deps) ? deps : [];
+	};
+}
+
+/**
+ * Compile a template with dependency awareness.
+ * Extracts deps, detects cycles, compiles with lookupSource.
+ */
+async function compileWithDeps(
+	sourceCode: string,
+	schema: { fields: { key: string }[] } | undefined,
+	slug: string,
+	tenantId?: string | null
+): Promise<{ result: ReturnType<typeof compileAndBundle> extends Promise<infer R> ? R : never; dependencies: string[] }> {
+	const deps = extractTemplateDependencies(sourceCode);
+
+	if (deps.length > 0) {
+		const cycle = await detectCircularDependencies(slug, deps, makeLookupDeps(tenantId));
+		if (cycle) {
+			const path = cycle.join(' → ');
+			return {
+				result: { error: `Circular dependency detected: ${path}` },
+				dependencies: deps
+			};
+		}
+	}
+
+	const lookupSource = deps.length > 0 ? makeLookupSource(tenantId) : undefined;
+	const result = await compileAndBundle(sourceCode, schema, lookupSource);
+	return { result, dependencies: deps };
+}
+
+/**
+ * Recompile all templates that depend on the given slug.
+ * Recurses for transitive dependents.
+ */
+async function recompileDependents(slug: string, tenantId?: string | null, visited = new Set<string>()): Promise<void> {
+	if (visited.has(slug)) return;
+	visited.add(slug);
+
+	// Find templates whose dependencies contain this slug (tenant-scoped)
+	const dependents = await db
+		.selectFrom('templates')
+		.selectAll()
+		.where(({ eb, and }) => and([
+			eb(sql`dependencies`, '@>', sql`${JSON.stringify([slug])}::jsonb`),
+			tenantId
+				? eb.or([eb('tenant_id', '=', tenantId), eb('tenant_id', 'is', null)])
+				: eb('tenant_id', 'is', null)
+		]))
+		.execute();
+
+	const lookupSource = makeLookupSource(tenantId);
+
+	for (const dep of dependents) {
+		const schema = typeof dep.schema === 'string' ? JSON.parse(dep.schema) : dep.schema;
+		const result = await compileAndBundle(dep.source_code, schema, lookupSource);
+
+		await db.updateTable('templates').set({
+			compiled_js: result.ssrBundle ?? null,
+			compiled_client_js: result.clientBundle ?? null,
+			compiled_css: result.css ?? null,
+			compile_error: result.error ?? null,
+			updated_at: new Date()
+		}).where('id', '=', dep.id).execute();
+
+		// Only recurse if compilation succeeded
+		if (result.ssrBundle) {
+			await recompileDependents(dep.slug, tenantId, visited);
+		}
+	}
+}
+
+/**
+ * When a slug is renamed, update all dependent templates' source code.
+ */
+async function updateSlugInDependents(oldSlug: string, newSlug: string, tenantId?: string | null): Promise<void> {
+	// Find dependents (tenant-scoped)
+	const dependents = await db
+		.selectFrom('templates')
+		.selectAll()
+		.where(({ eb, and }) => and([
+			eb(sql`dependencies`, '@>', sql`${JSON.stringify([oldSlug])}::jsonb`),
+			tenantId
+				? eb.or([eb('tenant_id', '=', tenantId), eb('tenant_id', 'is', null)])
+				: eb('tenant_id', 'is', null)
+		]))
+		.execute();
+
+	// Phase 1: Update all source code + dependencies first (no compilation)
+	const oldImport = `$template/${oldSlug}`;
+	const newImport = `$template/${newSlug}`;
+
+	for (const dep of dependents) {
+		const newSource = dep.source_code.replaceAll(oldImport, newImport);
+		const newDraft = dep.draft_source_code?.replaceAll(oldImport, newImport) ?? null;
+		const deps: string[] = Array.isArray(dep.dependencies)
+			? dep.dependencies
+			: typeof dep.dependencies === 'string' ? JSON.parse(dep.dependencies) : [];
+		const newDeps = deps.map(d => d === oldSlug ? newSlug : d);
+
+		await db.updateTable('templates').set({
+			source_code: newSource,
+			draft_source_code: newDraft,
+			dependencies: sql`${JSON.stringify(newDeps)}::jsonb`,
+			updated_at: new Date()
+		}).where('id', '=', dep.id).execute();
+	}
+
+	// Phase 2: Recompile all dependents (now lookupSource sees updated sources)
+	const lookupSource = makeLookupSource(tenantId);
+
+	for (const dep of dependents) {
+		// Re-read to get updated source
+		const updated = await getTemplateById(dep.id);
+		if (!updated) continue;
+
+		const schema = typeof updated.schema === 'string' ? JSON.parse(updated.schema) : updated.schema;
+		const result = await compileAndBundle(updated.source_code, schema, lookupSource);
+
+		await db.updateTable('templates').set({
+			compiled_js: result.ssrBundle ?? null,
+			compiled_client_js: result.clientBundle ?? null,
+			compiled_css: result.css ?? null,
+			compile_error: result.error ?? null,
+			updated_at: new Date()
+		}).where('id', '=', dep.id).execute();
+	}
+}
+
+// ============================================
 // CREATE
 // ============================================
 
@@ -94,22 +258,23 @@ export async function getTemplateBySlug(
 export async function createTemplate(
 	data: Omit<NewTemplate, 'id' | 'created_at'>
 ): Promise<Template> {
-	// Compile + bundle the source code if provided
 	let compiledJs: string | null = null;
 	let compiledClientJs: string | null = null;
 	let compiledCss: string | null = null;
 	let compileError: string | null = null;
+	let dependencies: string[] = [];
 
 	if (data.source_code) {
 		const schema = typeof data.schema === 'string' ? JSON.parse(data.schema) : data.schema;
-		const result = await compileAndBundle(data.source_code, schema);
+		const compiled = await compileWithDeps(data.source_code, schema, data.slug, data.tenant_id);
+		dependencies = compiled.dependencies;
 
-		if (result.ssrBundle) {
-			compiledJs = result.ssrBundle;
-			compiledClientJs = result.clientBundle ?? null;
-			compiledCss = result.css ?? null;
+		if (compiled.result.ssrBundle) {
+			compiledJs = compiled.result.ssrBundle;
+			compiledClientJs = compiled.result.clientBundle ?? null;
+			compiledCss = compiled.result.css ?? null;
 		} else {
-			compileError = result.error ?? null;
+			compileError = compiled.result.error ?? null;
 		}
 	}
 
@@ -126,6 +291,7 @@ export async function createTemplate(
 			compiled_client_js: compiledClientJs,
 			compiled_css: compiledCss,
 			compile_error: compileError,
+			dependencies: sql`${JSON.stringify(dependencies)}::jsonb`,
 			schema: data.schema ?? { fields: [] },
 			sample_data: data.sample_data ?? {},
 			updated_at: new Date()
@@ -148,31 +314,40 @@ export async function updateTemplate(
 	data: Partial<Omit<TemplateUpdate, 'id' | 'created_at'>>
 ): Promise<Template | null> {
 	const existing = await getTemplateById(id);
-	if (existing?.is_core) throw new Error('Core templates cannot be modified');
-	// If source code changed, recompile
+	if (!existing) return null;
+	if (existing.is_core) throw new Error('Core templates cannot be modified');
+
 	let compiledJs: string | null | undefined;
 	let compiledClientJs: string | null | undefined;
 	let compiledCss: string | null | undefined;
 	let compileError: string | null | undefined;
+	let dependencies: string[] | undefined;
 
+	// Handle slug rename: update dependents' source code
+	if (data.slug && data.slug !== existing.slug) {
+		await updateSlugInDependents(existing.slug, data.slug, existing.tenant_id);
+	}
+
+	// If source code changed, recompile with dependency awareness
 	if (data.source_code !== undefined) {
 		const schema = typeof data.schema === 'string' ? JSON.parse(data.schema) : data.schema;
-		const result = await compileAndBundle(data.source_code, schema);
+		const compiled = await compileWithDeps(data.source_code, schema, existing.slug, existing.tenant_id);
+		dependencies = compiled.dependencies;
 
-		if (result.ssrBundle) {
-			compiledJs = result.ssrBundle;
-			compiledClientJs = result.clientBundle ?? null;
-			compiledCss = result.css ?? null;
+		if (compiled.result.ssrBundle) {
+			compiledJs = compiled.result.ssrBundle;
+			compiledClientJs = compiled.result.clientBundle ?? null;
+			compiledCss = compiled.result.css ?? null;
 			compileError = null;
 		} else {
-			compileError = result.error ?? null;
+			compileError = compiled.result.error ?? null;
 			compiledJs = null;
 			compiledClientJs = null;
 			compiledCss = null;
 		}
 	}
 
-	const updateData: TemplateUpdate = {
+	const updateData: Record<string, unknown> = {
 		...data,
 		updated_at: new Date()
 	};
@@ -181,6 +356,7 @@ export async function updateTemplate(
 	if (compiledClientJs !== undefined) updateData.compiled_client_js = compiledClientJs;
 	if (compiledCss !== undefined) updateData.compiled_css = compiledCss;
 	if (compileError !== undefined) updateData.compile_error = compileError;
+	if (dependencies !== undefined) updateData.dependencies = sql`${JSON.stringify(dependencies)}::jsonb`;
 
 	const result = await db
 		.updateTable('templates')
@@ -188,6 +364,11 @@ export async function updateTemplate(
 		.where('id', '=', id)
 		.returningAll()
 		.executeTakeFirst();
+
+	// Cascade recompile dependents after successful compile
+	if (result && compiledJs !== undefined) {
+		await recompileDependents(result.slug, result.tenant_id);
+	}
 
 	return result ?? null;
 }
@@ -224,22 +405,28 @@ export async function publishTemplate(id: string): Promise<Template | null> {
 	const sourceToPublish = template.draft_source_code || template.source_code;
 	const schema = typeof template.schema === 'string' ? JSON.parse(template.schema) : template.schema;
 
-	const compiled = await compileAndBundle(sourceToPublish, schema);
+	const compiled = await compileWithDeps(sourceToPublish, schema, template.slug, template.tenant_id);
 
 	const result = await db
 		.updateTable('templates')
 		.set({
 			source_code: sourceToPublish,
 			draft_source_code: null,
-			compiled_js: compiled.ssrBundle ?? null,
-			compiled_client_js: compiled.clientBundle ?? null,
-			compiled_css: compiled.css ?? null,
-			compile_error: compiled.error ?? null,
+			compiled_js: compiled.result.ssrBundle ?? null,
+			compiled_client_js: compiled.result.clientBundle ?? null,
+			compiled_css: compiled.result.css ?? null,
+			compile_error: compiled.result.error ?? null,
+			dependencies: sql`${JSON.stringify(compiled.dependencies)}::jsonb`,
 			updated_at: new Date()
 		})
 		.where('id', '=', id)
 		.returningAll()
 		.executeTakeFirst();
+
+	// Cascade recompile dependents
+	if (result && compiled.result.ssrBundle) {
+		await recompileDependents(result.slug, result.tenant_id);
+	}
 
 	return result ?? null;
 }
@@ -286,8 +473,10 @@ export async function forkTemplate(templateId: string, tenantId: string): Promis
 			category: original.category,
 			source_code: original.source_code,
 			compiled_js: original.compiled_js,
+			compiled_client_js: original.compiled_client_js,
 			compiled_css: original.compiled_css,
 			compile_error: original.compile_error,
+			dependencies: original.dependencies,
 			schema: original.schema,
 			sample_data: original.sample_data,
 			updated_at: new Date()
@@ -305,18 +494,22 @@ export async function forkTemplate(templateId: string, tenantId: string): Promis
 /**
  * Compile a template without saving (for preview).
  * Uses the same sandbox SSR pipeline as production rendering.
+ *
+ * @param tenantId - enables $template/* import resolution (draft-aware)
  */
 export async function compileTemplatePreview(
 	sourceCode: string,
 	schema?: TemplateSchema,
-	sampleData?: Record<string, unknown>
+	sampleData?: Record<string, unknown>,
+	tenantId?: string | null
 ): Promise<{
 	success: boolean;
 	html?: string;
 	css?: string;
 	error?: string;
 }> {
-	const result = await compileAndBundle(sourceCode, schema);
+	const lookupSource = tenantId ? makeLookupSource(tenantId, true) : undefined;
+	const result = await compileAndBundle(sourceCode, schema, lookupSource);
 	if (!result.ssrBundle) {
 		return { success: false, error: result.error };
 	}

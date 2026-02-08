@@ -356,6 +356,9 @@ export interface TemplatesTable {
 	// Schema defines editable props
 	schema: Json<TemplateSchema>;
 
+	// Template composition: slugs of imported templates
+	dependencies: Generated<Json<string[]>>;
+
 	// Sample data for preview
 	sample_data: Json<Record<string, unknown>>;
 
