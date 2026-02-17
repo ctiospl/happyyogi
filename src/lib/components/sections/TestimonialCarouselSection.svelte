@@ -2,6 +2,7 @@
 	import type { TestimonialCarouselBlock } from '$lib/types';
 	import { Card, CardContent } from '$lib/components/ui/card';
 	import { Quote, User } from '@lucide/svelte';
+	import { toWebpUrl } from '$lib/utils/image.js';
 
 	interface Props {
 		block: TestimonialCarouselBlock;
@@ -26,11 +27,18 @@
 						</p>
 						<div class="flex items-center gap-3">
 							{#if testimonial.avatar}
-								<img
+								<picture>
+									{#if toWebpUrl(testimonial.avatar) !== testimonial.avatar}
+										<source srcset={toWebpUrl(testimonial.avatar)} type="image/webp" />
+									{/if}
+									<img
 									src={testimonial.avatar}
 									alt={testimonial.author}
+									loading="lazy"
+									decoding="async"
 									class="h-10 w-10 rounded-full object-cover"
 								/>
+								</picture>
 							{:else}
 								<div class="flex h-10 w-10 items-center justify-center rounded-full bg-gradient-to-br from-primary to-accent text-primary-foreground">
 									<User class="h-5 w-5" />

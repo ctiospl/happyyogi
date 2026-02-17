@@ -2,6 +2,7 @@
 	import type { ServicesGridBlock } from '$lib/types';
 	import { Card, CardContent } from '$lib/components/ui/card';
 	import * as Icons from '@lucide/svelte';
+	import { toWebpUrl } from '$lib/utils/image.js';
 
 	interface Props {
 		block: ServicesGridBlock;
@@ -56,11 +57,18 @@
 			{#if block.featureImage}
 				<div class="relative hidden lg:block">
 					<div class="absolute -inset-4 rounded-3xl bg-gradient-to-br from-primary/20 to-accent/20 blur-2xl"></div>
-					<img
+					<picture>
+						{#if toWebpUrl(block.featureImage) !== block.featureImage}
+							<source srcset={toWebpUrl(block.featureImage)} type="image/webp" />
+						{/if}
+						<img
 						src={block.featureImage}
 						alt=""
+						loading="lazy"
+						decoding="async"
 						class="relative rounded-2xl object-cover shadow-lifted"
 					/>
+					</picture>
 				</div>
 			{/if}
 		</div>

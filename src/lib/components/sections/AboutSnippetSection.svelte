@@ -2,6 +2,7 @@
 	import type { AboutSnippetBlock } from '$lib/types';
 	import { Button } from '$lib/components/ui/button';
 	import { Users, Check } from '@lucide/svelte';
+	import { toWebpUrl } from '$lib/utils/image.js';
 
 	interface Props {
 		block: AboutSnippetBlock;
@@ -18,11 +19,18 @@
 				<div class="relative">
 					<div class="absolute -inset-4 rounded-3xl bg-gradient-to-tr from-accent/30 to-primary/30 blur-3xl"></div>
 					<div class="relative overflow-hidden rounded-2xl shadow-lifted">
-						<img
+						<picture>
+							{#if toWebpUrl(block.image) !== block.image}
+								<source srcset={toWebpUrl(block.image)} type="image/webp" />
+							{/if}
+							<img
 							src={block.image}
 							alt=""
+							loading="lazy"
+							decoding="async"
 							class="w-full"
 						/>
+						</picture>
 					</div>
 					<!-- Floating stats card -->
 					{#if block.stats && block.stats.length > 0}

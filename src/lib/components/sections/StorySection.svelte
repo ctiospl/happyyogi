@@ -1,5 +1,6 @@
 <script lang="ts">
 	import type { StoryBlock } from '$lib/types';
+	import { toWebpUrl } from '$lib/utils/image.js';
 
 	interface Props {
 		block: StoryBlock;
@@ -22,11 +23,18 @@
 
 			{#if block.image}
 				<div class="mb-8">
-					<img
+					<picture>
+						{#if toWebpUrl(block.image) !== block.image}
+							<source srcset={toWebpUrl(block.image)} type="image/webp" />
+						{/if}
+						<img
 						src={block.image}
 						alt=""
+						loading="lazy"
+						decoding="async"
 						class="w-full rounded-2xl shadow-lifted"
 					/>
+					</picture>
 				</div>
 			{/if}
 

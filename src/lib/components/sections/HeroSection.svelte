@@ -2,6 +2,7 @@
 	import type { HeroBlock } from '$lib/types';
 	import { Button } from '$lib/components/ui/button';
 	import { MapPin } from '@lucide/svelte';
+	import { toWebpUrl } from '$lib/utils/image.js';
 
 	interface Props {
 		block: HeroBlock;
@@ -10,15 +11,33 @@
 	let { block }: Props = $props();
 </script>
 
+<svelte:head>
+	{#if block.backgroundImage}
+		{@const webpSrc = toWebpUrl(block.backgroundImage)}
+		{#if webpSrc !== block.backgroundImage}
+			<link rel="preload" as="image" href={webpSrc} type="image/webp" />
+		{:else}
+			<link rel="preload" as="image" href={block.backgroundImage} />
+		{/if}
+	{/if}
+</svelte:head>
+
 <section class="relative min-h-[90vh] overflow-hidden">
 	<!-- Background Image -->
 	{#if block.backgroundImage}
 		<div class="absolute inset-0">
-			<img
-				src={block.backgroundImage}
-				alt=""
-				class="h-full w-full object-cover"
-			/>
+			<picture>
+				{#if toWebpUrl(block.backgroundImage) !== block.backgroundImage}
+					<source srcset={toWebpUrl(block.backgroundImage)} type="image/webp" />
+				{/if}
+				<img
+					src={block.backgroundImage}
+					alt=""
+					fetchpriority="high"
+					decoding="auto"
+					class="h-full w-full object-cover"
+				/>
+			</picture>
 			<div class="absolute inset-0 bg-gradient-to-r from-background/95 via-background/70 to-background/30"></div>
 		</div>
 	{:else}

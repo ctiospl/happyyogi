@@ -48,11 +48,14 @@
 			href="/"
 			class="flex items-center transition-all duration-300"
 		>
-			<img
-				src="/images/logo-full.jpg"
-				alt="The Happy Yogi Co."
-				class="transition-all duration-300 object-contain {scrolled ? 'h-10' : 'h-14 sm:h-16'}"
-			/>
+			<picture>
+				<source srcset="/images/logo-full.webp" type="image/webp" />
+				<img
+					src="/images/logo-full.jpg"
+					alt="The Happy Yogi Co."
+					class="transition-all duration-300 object-contain {scrolled ? 'h-10' : 'h-14 sm:h-16'}"
+				/>
+			</picture>
 		</a>
 
 		<!-- Desktop Nav -->
@@ -95,11 +98,14 @@
 				<SheetContent side="right" class="w-72">
 					<SheetHeader>
 						<SheetTitle>
-							<img
-								src="/images/logo-full.jpg"
-								alt="The Happy Yogi Co."
-								class="h-12 w-auto object-contain"
-							/>
+							<picture>
+								<source srcset="/images/logo-full.webp" type="image/webp" />
+								<img
+									src="/images/logo-full.jpg"
+									alt="The Happy Yogi Co."
+									class="h-12 w-auto object-contain"
+								/>
+							</picture>
 						</SheetTitle>
 					</SheetHeader>
 					<nav aria-label="Mobile navigation" class="mt-8 flex flex-col gap-4">
