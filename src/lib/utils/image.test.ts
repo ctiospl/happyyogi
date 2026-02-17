@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { toWebpUrl } from './image.js';
+import { toWebpUrl } from './image';
 
 describe('toWebpUrl', () => {
 	it('converts .jpg to .webp', () => {
